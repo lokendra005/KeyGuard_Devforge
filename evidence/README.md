@@ -8,11 +8,14 @@ These are actual captured outputs, not mocked verdicts. Test identities, files a
 | `official-validator.log`, `official-linux.log` | Unmodified public validator, pinned toolkit commit `8901dfb`; latter uses a fresh network-disabled Linux container per request. |
 | `pqcrypto-interop.log`, `pqcrypto-linux.log` | Independent Python pqcrypto 0.4.0 decapsulation/HMAC oracle, 16 generated keypairs. |
 | `detector-holdout.json`, `detector-renamed-holdout.json` | Disjoint 4k reference / 12k held-out synthetic evaluations, two seeds, renamed services/roles/actions and honest confusion matrices. |
+| `detector-topology-holdout.json` | Independently written mesh/hub builder: slow chains, fan-out, session hopping and two-hop paths; 3,600 reference / 13,200 held-out events. |
 | `tls.log` | Actual TLS 1.3 trust and refusal checks. |
 | `docker-build.log`, `deployment-image.log` | Root source-only Docker build and tests from copied image content, without source bind mounts. |
 | `deployment-cluster.log` | Real TLS authority + three separate-cache containers on an internal Docker network; reads before and denial after revocation. |
+| `clock-concurrency-amd64.log` | 20 additional AMD64 concurrent-worker runs for the measured clock-anchor calibration fix. |
 | `legacy-preservation.log` | Source relocation and existing key-file hash checks; no live migration. |
 | `walkthrough.log` | Actual process-per-request adapter operations shown in the video. |
+| `streaming-video.json` | Unlisted Drive viewer permissions and observed browser playback. |
 | `video-validation.json` | Actual video/audio stream check and 300-second duration. |
 
 `./scripts/collect-evidence.sh --docker` regenerates the local evidence with the bundled runtime images. Set `TOOLKIT_DIR=/path/to/Track-4-Toolkit` and `PYTHON=/path/to/python3.12` to include the organizer/oracle checks; pqcrypto must already be available. No toolkit source or evaluation labels are built into the adapter.

@@ -8,9 +8,9 @@ The supplied review was used as an adversarial checklist. Changes were made in t
 | Expected worker errors exited as crashes; omitted disabled list | Expected input/policy errors return JSON with exit 0; absent `disabled` defaults to empty. Unexpected internal/storage failures remain nonzero. Real subprocess tests cover setup/read/audit/revoke/malformed input. |
 | Forged requests exhausted audit capacity and blocked revoke | Bounded minute counters replace per-attempt signatures; normal budget is configurable. Revocation, rotation, recovery, role changes, budget increases and backup bypass the soft limit but still require a durable commit. Both 75 direct forgeries and 50 actual HTTP requests leave the signed log uninflated. |
 | Status repeatedly verified all history | A cached verified checkpoint anchors suffix validation. Full export verification remains available. The cache is not a retrospective rescan for tampering in an already verified prefix. |
-| Detector tied to practice names/actions | Separate frozen reference baseline, action-independent role transitions, independent-approver checks, identity/role revocation, legitimate regrant handling, and actor/session path grouping with time decay. Novelty alone is not an attack alert. |
+| Detector tied to practice names/actions | Separate frozen reference baseline, action-independent role transitions, independent-approver checks, identity/role revocation, legitimate regrant handling, and actor-wide graph grouping with time decay. Novelty alone is not an attack alert. |
 | Input diversity and 10k limit | Numeric timezone offsets and up to nine fractional timestamp digits; optional fields default; impossible/ambiguous dates fail explicitly. 100k-event / 64-MiB offline analysis budget replaces 10k. An actual signed API test persists 10,020 events. API transport/metadata budgets remain 16 MiB, not unlimited. |
-| Missing generalization measurements | 4,000 reference + 12,000 disjoint held-out events with renamed identities/services/roles/actions, skew, late arrival and decoys. Labels only enter scoring. Report includes 120 misses rather than claiming perfect accuracy. A second seed is committed. |
+| Missing generalization measurements | 4,000 reference + 12,000 disjoint held-out events with renamed identities/services/roles/actions, skew, late arrival and decoys. Labels only enter scoring. Both the original holdout and an independently implemented topology holdout report their measured false positives and misses. A second renamed seed is also committed. |
 | Shared-file nodes avoided distribution | Independent encrypted node databases, retained signed policy chains, authority-pinned snapshots and fresh-challenge leases. Real five-process delay/partition measurement plus an actual HTTP sync test. Bound assumes a progressing monotonic clock; no Byzantine-consensus or WAN SLA claim. |
 | Rotation deleted in-flight offers | Offers survive through valid grace. Delivery/poll recheck old-key cutoff. Expired-key offers no longer shadow replacement offers or consume that recipient's new-offer quota. |
 | Anonymous identity enumeration | Public context contains no actor metadata. Identity bootstrap requires a fresh possession proof; anonymous known/unknown lookups receive the same denial. Cross-actor reads require privileges. |
@@ -27,7 +27,17 @@ The supplied review was used as an adversarial checklist. Changes were made in t
 ## Limits deliberately retained
 
 - Input, memory, storage, relay and backup limits remain explicit. Removing all bounds would create denial-of-service risks. A 128-MiB full-backup ceiling and 16-MiB API response limit remain operational constraints; no large-scale SLA is claimed.
-- The detector is retrospective and deterministic. Its latest-path-per-target representation can miss alternate branches; missing sessions can merge activity. Reviewed reference data, trustworthy logs and clock metadata are required.
+- The detector is retrospective and deterministic. Its actor-wide graph can flag legitimate unknown fan-out; reviewed baselines/approvals are needed. Reviewed reference data, trustworthy logs and clock metadata are required.
 - Lease expiry deliberately reduces availability during partitions. Monotonic-clock suspension/drift assumptions are stated; a paused VM whose clock stops does not satisfy the bound.
 - Session resumption and provable physical memory erasure are not implemented. Independent audit and hidden judge tests are unavailable.
 - Moving optional source and removing conversational notes does not alter provenance, authorship or hackathon eligibility. No history was rewritten to imply a different creation date.
+
+## Follow-up review: protocol v2
+
+- Outcome synonym configuration, exact-event deduplication, conflicting-duplicate errors, actor-wide graphs, fan-out, slower windows and successful two-hop evidence are implemented in the shared detector. A separately written topology generator supplements the original unchanged holdout; both confusion matrices are published, including the increased false positives.
+- Every sync is audited, requires a one-node/key-bound replicator and caps its lease. Admin sync is forbidden. Signed node read chains upload with retry-safe acknowledgements, are queryable by audit, and enter detection. Snapshots use verified full/delta mode and exact base checkpoints.
+- v2 signed audiences prevent authority/node and cross-node replay. Clients discover the target audience; old unsigned-audience envelopes fail closed.
+- Per-IP concurrency and five-second header/body deadlines are exercised with real trickling clients.
+- Unowned assets use NULL ownership and deny access. Plaintext UTF-8 bytes determine storage usage.
+- Persisted signed verification checkpoints accelerate cold startup; complete evidence verification and independent rollback anchors remain available. Read indexes bind their original signed event, including a signature that prevents substitution with a later event.
+- Migration/restart tests preserve authority keys, ciphertext and event history; node caches merge deltas across restart but never restore leases.

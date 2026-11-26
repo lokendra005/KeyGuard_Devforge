@@ -8,7 +8,7 @@ Install Node 24.11.1 using `scripts/install-node.sh` (verified official hashes),
 ./scripts/demo.sh
 ```
 
-This runs the real core, HTTP/CLI delivery, independent-node leases, actual SIGKILL crash recovery, malformed-input and migration/rotation adversarial tests, 225 independent ML-DSA vectors, a 12,000-event synthetic detector holdout and performance measurements. It creates only disposable test state. No external API key is needed.
+This runs the real core, HTTP/CLI delivery, independent-node leases, actual SIGKILL crash recovery, malformed-input and migration/rotation adversarial tests, 225 independent ML-DSA vectors, two independent synthetic detector holdouts (12,000 and 13,200 evaluation events) and performance measurements. It creates only disposable test state. No external API key is needed.
 
 For the organizer's independently supplied toolkit and Python environment:
 
@@ -23,7 +23,7 @@ The root adapter accepts one JSON request and returns one JSON response per proc
 
 ## Packaged offline runtime
 
-Download `keyguard-reviewer.tar.gz` and `REVIEWER-SHA256SUMS` from the [review-v2 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v2). Verify the archive, extract into an empty directory, then:
+Download `keyguard-reviewer.tar.gz` and `REVIEWER-SHA256SUMS` from the [review-v3 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v3). Verify the archive, extract into an empty directory, then:
 
 ```sh
 sha256sum -c SHA256SUMS
@@ -42,3 +42,5 @@ Docker must already be installed. Both Node 24.11.1 images are bundled; no pull 
 The [two-page brief](KeyGuard-brief.pdf) contains architecture, threat model and the accessible five-minute fallback video link. The [operator runbook](TRACK4_OPERATIONS.md) supplies initialization, real signed actions, messaging, recovery, TLS and independent-node deployment. [Design arguments](TRACK4_DESIGN.md) distinguish mathematical assumptions from empirical tests.
 
 Session resumption is deliberately unsupported, and the isolated-access detector blind spot is measured. Synthetic metrics, public-validator results and local tests are not hidden-worker scores or security certification. Authenticate release checksums through an independent channel; replacing an archive and its checksum together defeats checksums alone.
+
+Streaming walkthrough: [Google Drive video](https://drive.google.com/file/d/12ctCr6DAvSzDgRySdrr2QayL8FVswcMR/view). Anyone with the link can view; file discovery is disabled. The GitHub release also retains the downloadable MP4.

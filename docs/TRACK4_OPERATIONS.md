@@ -50,7 +50,7 @@ Put an operation in a JSON file and run `request --url URL --actor ID --key KEY 
 
 `prepare` writes an envelope for later `submit`; outputs never overwrite. Commands are single-use. After a timeout inspect state before issuing a new command. File writes have version checks; enrollment, rotation and recovery have conflict guards. There is no generic exactly-once network delivery claim.
 
-Optional setup policy can lower resource limits: 10,000 files, 1 MiB per file, 16 MiB encrypted file storage, 1,000 global relay records and 32 offers/mail records per actor, 60-second maximum rotation grace, 120-second request lifetime and 300-second mailbox lifetime. JSON input is capped at 16 MiB; identity strings at 4096 UTF-8 bytes; observer tokens at 1,000 entries. Capacity exhaustion is explicit, never silent evidence deletion. The normal audit budget is 1,000,000 events (configurable up to 1,000,000,000). `{"op":"policy.budget","max_events":2000000}` raises it under admin signature. Revocation, rotation, recovery, role changes and backups bypass that soft budget, while still requiring an atomic durable log commit. No software can guarantee a successful disk write after disk failure. Rejected signed commands update bounded minute counters rather than filling the signed log. Full authority backups remain bounded to 128 MiB; monitor their size and retain external audit checkpoints.
+Optional setup policy can lower resource limits: 10,000 files, 1 MiB per file, 16 MiB UTF-8 plaintext storage (ciphertext and SQLite overhead are additional), 1,000 global relay records and 32 offers/mail records per actor, 60-second maximum rotation grace, 120-second request lifetime and 300-second mailbox lifetime. JSON input is capped at 16 MiB; identity strings at 4096 UTF-8 bytes; observer tokens at 1,000 entries. Capacity exhaustion is explicit, never silent evidence deletion. The normal audit budget is 1,000,000 events (configurable up to 1,000,000,000). `{"op":"policy.budget","max_events":2000000}` raises it under admin signature. Revocation, rotation, recovery, role changes and backups bypass that soft budget, while still requiring an atomic durable log commit. No software can guarantee a successful disk write after disk failure. Rejected signed commands update bounded minute counters rather than filling the signed log. Full authority backups remain bounded to 128 MiB; monitor their size and retain external audit checkpoints.
 
 ## Rotation and recovery
 
@@ -111,13 +111,25 @@ Use `serve --host ADDRESS --cert cert.pem --tls-key key.pem --origin https://HOS
 
 For Compose, initialize state and set `KIG_TRACK4_STATE`, `KIG_TLS_CERT`, `KIG_TLS_KEY`, `KIG_PUBLIC_ORIGIN`, plus matching `KIG_UID`/`KIG_GID`. Run `docker compose -f compose.track4.yaml up --build`. The published address defaults to host loopback. Additional local API processes need distinct ports/node IDs and the same state directory. Use a local filesystem with SQLite WAL locking, not an arbitrary network share.
 
-`serve --anchor checkpoint.json` verifies startup history against an independently retained prefix. Refresh that external anchor through your custody process; an old checkpoint cannot detect an unseen lost suffix. Detector inputs are bounded, with a 100,000-event / 64-MiB offline analysis budget. The API uses smaller 16-MiB transport/metadata budgets. A path tail contains at most 128 steps; the latest branch per target is retained.
+`serve --anchor checkpoint.json` verifies startup history against an independently retained prefix. Refresh that external anchor through your custody process; an old checkpoint cannot detect an unseen lost suffix. Detector inputs are bounded, with a 100,000-event / 64-MiB offline analysis budget. The API uses smaller 16-MiB transport/metadata budgets. Graphs group by actor across sessions, with distinct undirected edges and a 30-minute window.
 
 Optional Go commands and storage are under `legacy/`; Track 4 and Go checkpoints are different formats.
 
 ## Independent read nodes
 
-Enroll a dedicated `replicator` identity using the usual admin enrollment. This role may fetch resource snapshots but may not rotate/revoke other users. Copy only its key to the trusted node host and pin the authority checkpoint's `authority` and `public_key` in `trust.json`. Every node uses its own state directory and stable node ID; do not share a cache database between hosts.
+First provision each node audit key, then enroll a distinct replication credential bound to that node:
+
+```sh
+node track4/cli.cjs replica-init --state /private/node-a --node node-a --trust trust.json --out node-a-binding.json
+node track4/cli.cjs keygen --out node-a-credential.json
+node track4/cli.cjs enroll --url https://authority.example:8444 --ca ca.pem \
+  --actor operator --key operator.json --target replica-a --role replicator \
+  --new-key node-a-credential.json --binding node-a-binding.json
+```
+
+Paths and URL are deployment configuration. Preserve the initialized node directory; its audit public key is the binding. Repeat with distinct state, node ID and credentials for other nodes. An existing unbound replicator can be bound once by an admin-signed `replica.bind` body containing actor, node_id and node_public_key. Replacing a lost node audit key requires a new node ID/credential; bindings cannot silently change.
+
+ This role may fetch resource snapshots but may not rotate/revoke other users. Copy only its key to the trusted node host and pin the authority checkpoint's `authority` and `public_key` in `trust.json`. Every node uses its own state directory and stable node ID; do not share a cache database between hosts.
 
 A node config `replica.json` uses real operator-supplied paths:
 
@@ -136,7 +148,7 @@ A node config `replica.json` uses real operator-supplied paths:
 
 Run `node track4/cli.cjs serve --state /private/node-a --replica replica.json --port 8451` for a loopback development node, or supply TLS certificate/key/origin for other bindings. Clients use the same signed read/protected-read commands against that node's URL. Mutations, recovery, messaging and the dashboard use the authoritative API. `/healthz` returns 503 once the lease expires. Nodes restart closed until fresh sync; a stopped or slow authority therefore sacrifices availability to protect revoked resources.
 
-`compose.replicas.yaml` provides three separately mounted caches. Combine it with `compose.yaml`; supply `KIG_REPLICA_A_STATE`, `KIG_REPLICA_B_STATE`, `KIG_REPLICA_C_STATE`, `KIG_REPLICA_CONFIG` and a TLS `KIG_REPLICA_ORIGIN`. The example publishes different host ports but checks a single canonical TLS origin; use a reverse proxy with that Host, or override each service's command/origin for direct access. Ensure upstream DNS, certificate SAN and configured Host/Origin agree. Mount real credentials privately; no credentials are embedded in Compose.
+`compose.replicas.yaml` provides three separately mounted caches. Combine it with `compose.yaml`; supply `KIG_REPLICA_A_STATE`, `KIG_REPLICA_B_STATE`, `KIG_REPLICA_C_STATE`, `KIG_REPLICA_A_CONFIG`, `KIG_REPLICA_B_CONFIG`, `KIG_REPLICA_C_CONFIG` and a TLS `KIG_REPLICA_ORIGIN`. The example publishes different host ports but checks a single canonical TLS origin; use a reverse proxy with that Host, or override each service's command/origin for direct access. Ensure upstream DNS, certificate SAN and configured Host/Origin agree. Mount real credentials privately; no credentials are embedded in Compose.
 
 ## Detection with a frozen reference
 
@@ -148,3 +160,7 @@ node track4/cli.cjs detect --events evaluation.csv --reference earlier-reviewed.
 A minimal `detector-policy.json` is `{}` when `--reference` is provided. The earlier CSV must be reviewed as benign; evaluation timestamps must follow its last corrected timestamp. `source_clock_offset_ms` is a measured input, not estimated from labels. Public practice policy remains an explicitly scoped example, not the primary performance claim. Run `node track4/test/detector-benchmark.cjs` to regenerate the 12,000-event synthetic holdout metrics.
 
 To repeat the isolated container deployment check, build `keyguard-track4:review` from the root Dockerfile and run `python3 scripts/deployment-smoke.py`. It creates one authoritative TLS service and three distinct-cache TLS nodes on an internal network, verifies access and revocation, then removes its own containers and temporary state. It needs Docker, Node, Python and OpenSSL and publishes no host ports.
+
+`replica.sync` is restricted to its bound replicator. Requested leases above policy are clamped to 5000 ms by default. The first snapshot is full; later snapshots are signed checkpoint-bound deltas. Node read logs upload on subsequent syncs and are acknowledged atomically. To query a node read, send `{"op":"audit","node_id":"node-a","request_id":"YOUR_ID"}` after its next successful sync. `detector.ingest` imports verified node reads, mapping node ID to source and resource ID to target; use a reviewed reference in those namespaces. Partitioned reads remain local until sync resumes.
+
+Stop/restart all authority and replica processes for the upgrade; do not run old binaries alongside v2. Authority storage advances to schema 2 and appends a signed upgrade record; old binaries reject subsequent opens. Protocol v1 network envelopes are intentionally rejected after this upgrade. Existing identity key files and audit history are preserved; use the updated CLI to sign v2 destination-bound requests. Run both detector generators to inspect sensitivity and false positives: `node track4/test/detector-benchmark.cjs` and `node track4/test/detector-topology-benchmark.cjs`.

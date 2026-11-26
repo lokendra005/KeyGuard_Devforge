@@ -12,13 +12,13 @@ repeat protected_read
 {"error":"REPLAY","process_exit":0}
 
 revoke owner
-{"effective_at_ms":1795727968330,"revoked":true}
+{"effective_at_ms":1795733664686,"revoked":true}
 
 read after revocation
 {"decision":"deny"}
 
 audit the denied request
-{"decision":"deny","request_id":"7dcbcf3073d7b9db76c15abf22a58317299ab93ebdb23070"}
+{"decision":"deny","request_id":"119564e251e9712fc1b358a5957c3e58508540831f54c99f"}
 
 unknown actor revocation is a structured error
 {"error":"NOT_FOUND"}

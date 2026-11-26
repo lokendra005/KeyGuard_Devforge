@@ -4,7 +4,7 @@ Post-quantum protected files, recoverable identities and encrypted delivery for 
 
 **No API key, hosted service, model or npm installation is required.** Runtime decisions use ownership, live identity/key state, signed commands and cryptographic verification. Example names and baseline data are configuration, never expected-answer branches.
 
-- [Two-page brief](docs/KeyGuard-brief.pdf) · [Five-minute fallback video](https://github.com/lokendra005/KeyGuard_Devforge/releases/download/review-v2/keyguard-demo.mp4)
+- [Two-page brief](docs/KeyGuard-brief.pdf) · [Stream the five-minute video](https://drive.google.com/file/d/12ctCr6DAvSzDgRySdrr2QayL8FVswcMR/view) · [Download fallback](https://github.com/lokendra005/KeyGuard_Devforge/releases/download/review-v3/keyguard-demo.mp4)
 - [Architecture, algorithms and conditional security arguments](docs/TRACK4_DESIGN.md)
 - [Operator runbook](docs/TRACK4_OPERATIONS.md) · [Reviewer instructions](docs/SUBMISSION.md)
 - [Committed test evidence](evidence/README.md) · [Security review resolution](docs/REVIEW_RESOLUTION.md)
@@ -54,26 +54,34 @@ Example IDs/content are editable. Private keys stay outside Git and outside the 
 | Property | Implementation / measured result |
 |---|---|
 | Protected read | ML-KEM-768 plus exact organizer HMAC-SHA-256 challenge/content proof |
-| Identity commands | ML-DSA-65, canonical JSON, epoch + nonce + expiry |
+| Identity commands | ML-DSA-65, canonical JSON v2, destination audience + epoch + nonce + expiry |
 | Rotation grace | Configurable 0-60 seconds; partial transfers continue only while both peer keys remain valid |
-| Independent-node revocation | Lease default 5 seconds; conditional authorization bound `L/(1-rho)` for monotonic clock drift bound `rho`; five-node ARM64 sample L=3000 ms: p50 308 ms, p99/max 3004 ms (includes polling) |
+| Independent-node revocation | Lease default 5 seconds; conditional authorization bound `L/(1-rho)` for monotonic clock drift bound `rho`; five-node ARM64 sample L=3000 ms: median 337 ms, max of 5 samples 3000 ms (includes polling) |
 | Audit | Signed SHA-384 chain; external rollback checkpoint; first correlation decision retained; suffix verification for status |
-| Detector | Frozen-reference frequency baseline, role-state/approval/revocation rules and time-decayed connected paths; no ML |
+| Detector | Frozen reference, configurable outcome synonyms, role/approval/revocation rules and actor-wide undirected components; 30-minute window / 10-minute half-life; no ML |
 | Timing envelope | Default +/-300-second measured offset; 120-second lateness; raw timestamps and uncertainty retained |
-| Synthetic holdout | 4,000 reference + 12,000 held-out events; F1 **0.9412**, TP 960 / FP 0 / FN 120 / TN 10,920 |
-| Median alert delay | **83,109.5 ms**, receipt-derived with injected delays up to 120 s; not CPU latency |
-| False-alerted events / 1,000 benign | **0** on this synthetic holdout; not a production accuracy claim |
 
-The held-out generator renames services, actions and roles and includes benign novelty, skew, late arrivals and known misses. Training/evaluation windows cannot overlap. An isolated stolen-credential access can remain indistinguishable from a legitimate novel path; the detector does not hide that false-negative tradeoff.
+Two generators are implemented separately and use disjoint reference/evaluation windows. The first holdout's scenarios and labels are unchanged; the second uses a different random source, mesh/hub topology, vocabulary and attack mix. Both use the current defaults, without fitting thresholds to labels.
+
+| Synthetic evaluation | Original holdout | Independent topology holdout |
+|---|---:|---:|
+| Reference / evaluated events | 4,000 / 12,000 | 3,600 / 13,200 |
+| TP / FP / FN / TN | 1,080 / 720 / 0 / 10,200 | 1,300 / 200 / 100 / 11,600 |
+| F1 | **0.7500** | **0.8966** |
+| Precision / recall | 0.6000 / 1.0000 | 0.8667 / 0.9286 |
+| Median receipt-derived alert delay | 82,019 ms | 98,295.5 ms |
+| False-alerted events per 1,000 benign | 65.93 | 16.95 |
+
+The requested actor-wide fan-out/two-hop sensitivity improves recall but reduces precision on the original holdout (previous F1 0.9412, now 0.7500). Unknown benign two-edge activity can look identical to an attack; the second holdout also retains 100 isolated-attack misses. These are event-level synthetic results, not production accuracy. Alert latency includes up to 120 seconds of collection delay.
 
 ## Containers and offline review
 
 `docker build -t keyguard-track4 .` works from a clean clone; it does not require prebuilt files in `dist/`. The exact base digest is pinned. `compose.yaml` supplies the authoritative TLS API; `compose.replicas.yaml` adds separately mounted read nodes. See the runbook for certificates, origins, credentials and state ownership.
 
-The [review-v2 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v2) includes a checksummed reviewer bundle with both runtime images. Extract it, run `sha256sum -c SHA256SUMS`, then `./scripts/demo.sh --docker`. Tests run unprivileged with networking disabled, a read-only root/source and temporary writable state. Committed logs remain available without downloading that bundle. `scripts/collect-evidence.sh` regenerates them.
+The [review-v3 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v3) includes a checksummed reviewer bundle with both runtime images. Extract it, run `sha256sum -c SHA256SUMS`, then `./scripts/demo.sh --docker`. Tests run unprivileged with networking disabled, a read-only root/source and temporary writable state. Committed logs remain available without downloading that bundle. `scripts/collect-evidence.sh` regenerates them.
 
 ## Security boundaries
 
-The trusted worker is local, not an unsigned network API. The authority and replica hosts are trusted; the relay alone cannot decrypt client messages. Master keys live beside their databases, so encryption at rest protects a **database-only leak**, not theft of the entire state directory. Lease guarantees assume a progressing monotonic clock, including host suspension; queued network bytes can arrive after authorization expires. Lost receiver state requires a new ephemeral offer. Unpublished judge tests and independent cryptographic certification are not claimed.
+The trusted worker is local, not an unsigned network API. Replicator credentials can export every file plaintext, and admin credentials can acquire every file through audited ownership changes. Every replica sync records its node, exported count, checkpoint, lease and uploaded-log acknowledgement; admin credentials cannot call sync. The authority and replica hosts are trusted; the relay alone cannot decrypt client messages. Master keys live beside their databases, so encryption at rest protects a **database-only leak**, not theft of the entire state directory. Lease guarantees assume a progressing monotonic clock, including host suspension; queued network bytes can arrive after authorization expires. Lost receiver state requires a new ephemeral offer. Unpublished judge tests and independent cryptographic certification are not claimed.
 
-The optional Go/PostgreSQL implementation is contained under [legacy/](legacy/README.md), outside the default build and reviewer bundle. Its provenance and repository history remain visible; no eligibility claim is inferred from directory layout.
+The optional Go/PostgreSQL implementation is contained under [legacy/](legacy/README.md), outside the default build and reviewer bundle. Its provenance and repository history remain visible.

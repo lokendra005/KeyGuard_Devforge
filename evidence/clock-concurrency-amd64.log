@@ -1,0 +1,200 @@
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1443.055126ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":471,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1833.596126
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1443.587793ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":488,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1841.075043
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1422.495459ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":483,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1817.366042
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1401.432709ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":462,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1800.633126
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1491.393834ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":466,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1883.779293
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1435.505375ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":469,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1831.914126
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1404.709376ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":474,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1798.364043
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1440.25796ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":491,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1836.746251
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1412.222626ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":471,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1807.897668
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1462.819834ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":487,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1865.589501
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1418.633625ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":467,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1820.541834
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1406.070751ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":467,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1802.118292
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1418.446001ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":464,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1824.531459
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1449.932751ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":485,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1856.463
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1413.542542ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":455,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1811.596709
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1417.6685ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":469,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1824.518042
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1416.813042ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":458,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1821.205334
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1398.171542ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":462,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1794.010542
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1456.657209ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":506,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1859.390584
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (1416.740875ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":454,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1816.409251
