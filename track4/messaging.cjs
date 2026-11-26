@@ -288,7 +288,27 @@ function relay(store, request, auth, now) {
   const db = store.db;
   db.prepare("DELETE FROM mail WHERE expires<?").run(now);
   db.prepare("DELETE FROM offers WHERE expires<?").run(now);
+  const activeRecipient = (offer) => {
+    const key = db.prepare("SELECT * FROM keys WHERE id=?").get(offer.to_key);
+    const actor = db.prepare("SELECT * FROM actors WHERE id=?").get(offer.to);
+    return (
+      key &&
+      key.actor === offer.to &&
+      !key.revoked &&
+      actor &&
+      !actor.disabled &&
+      (key.not_after === null || now < key.not_after)
+    );
+  };
   if (request.op === "mail.offer") {
+    for (const row of db
+      .prepare("SELECT id,body FROM offers WHERE actor=?")
+      .all(auth.actor)) {
+      if (!activeRecipient(C.parse(row.body))) {
+        db.prepare("DELETE FROM mail WHERE offer_id=?").run(row.id);
+        db.prepare("DELETE FROM offers WHERE id=?").run(row.id);
+      }
+    }
     const offer = request.offer;
     const key = db
       .prepare("SELECT public_key FROM keys WHERE id=?")
@@ -319,6 +339,12 @@ function relay(store, request, auth, now) {
       "MAILBOX_CAPACITY",
     );
     C.check(
+      db
+        .prepare("SELECT count(*) AS n FROM offers WHERE actor=?")
+        .get(auth.actor).n < (store.policy().max_mail_per_actor || 32),
+      "ACTOR_MAILBOX_CAPACITY",
+    );
+    C.check(
       !db.prepare("SELECT id FROM offers WHERE id=?").get(offer.id),
       "OFFER_REUSED",
     );
@@ -345,7 +371,10 @@ function relay(store, request, auth, now) {
     return {
       offer:
         candidates.find(
-          (o) => o.from === auth.actor && o.from_key === auth.key_id,
+          (o) =>
+            o.from === auth.actor &&
+            o.from_key === auth.key_id &&
+            activeRecipient(o),
         ) || null,
     };
   }
@@ -396,6 +425,18 @@ function relay(store, request, auth, now) {
           store.policy().max_mail,
       "MAILBOX_CAPACITY",
     );
+    if (!existing) {
+      const quota = store.policy().max_mail_per_actor || 32;
+      C.check(
+        db
+          .prepare("SELECT count(*) AS n FROM mail WHERE sender=?")
+          .get(auth.actor).n < quota &&
+          db
+            .prepare("SELECT count(*) AS n FROM mail WHERE recipient=?")
+            .get(h.to).n < quota,
+        "ACTOR_MAILBOX_CAPACITY",
+      );
+    }
     C.check(
       !db
         .prepare("SELECT id FROM mail WHERE offer_id=? AND id<>?")
@@ -430,7 +471,21 @@ function relay(store, request, auth, now) {
           "SELECT body FROM mail WHERE recipient=? ORDER BY expires LIMIT 8",
         )
         .all(auth.actor)
-        .map((r) => C.parse(r.body)),
+        .map((r) => C.parse(r.body))
+        .filter((frames) =>
+          [frames[0].header.from_key, frames[0].header.to_key].every((id) => {
+            const key = db.prepare("SELECT * FROM keys WHERE id=?").get(id);
+            const actor =
+              key &&
+              db.prepare("SELECT * FROM actors WHERE id=?").get(key.actor);
+            return (
+              actor &&
+              !actor.disabled &&
+              !key.revoked &&
+              (key.not_after === null || now < key.not_after)
+            );
+          }),
+        ),
     };
   }
   if (request.op === "mail.ack") {

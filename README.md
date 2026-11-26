@@ -1,43 +1,79 @@
-# Key Identity Guard
+# KeyGuard_Devforge
 
-An offline protected-resource system for Track 4: real ML-KEM-768 protected reads, ML-DSA-65 identity commands, atomic key rotation/recovery, encrypted client-to-client delivery, verifiable access logs and explainable detection. The judge adapter, CLI, HTTP API and dashboard call the same authority core. No npm install, external API key, hosted service or model is required.
+Post-quantum protected files, recoverable identities and encrypted delivery for DevForge Track 4. The judge adapter, CLI, API and dashboard share the authority core. Independent read nodes maintain signed policy chains and separate encrypted caches, and fail closed when their short leases expire.
 
-Use **Node 24.11.1**, the organizer’s runtime. State lives outside the source tree. The existing Go/PostgreSQL ledger is preserved separately; its keys, versioned SHA-384 history and deployment are unchanged. Its historical runbook is [LEDGER.md](docs/LEDGER.md).
+**No API key, hosted service, model or npm installation is required.** Runtime decisions use ownership, live identity/key state, signed commands and cryptographic verification. Example names and baseline data are configuration, never expected-answer branches.
 
-- [Architecture, algorithms, conditional arguments and limits](docs/TRACK4_DESIGN.md)
-- [Operator runbook](docs/TRACK4_OPERATIONS.md)
-- [Offline reviewer instructions and evidence](docs/SUBMISSION.md)
+- [Two-page brief](docs/KeyGuard-brief.pdf) · [Five-minute fallback video](https://github.com/lokendra005/KeyGuard_Devforge/releases/download/review-v2/keyguard-demo.mp4)
+- [Architecture, algorithms and conditional security arguments](docs/TRACK4_DESIGN.md)
+- [Operator runbook](docs/TRACK4_OPERATIONS.md) · [Reviewer instructions](docs/SUBMISSION.md)
+- [Committed test evidence](evidence/README.md) · [Security review resolution](docs/REVIEW_RESOLUTION.md)
 
-## Reviewer entrypoint
+## Dependencies and clean-machine setup
 
-`track4_service.cjs` is the sole supported root entrypoint. It reads one JSON request from stdin, writes one JSON response and exits. State persists under `TRACK4_STATE_DIR/keyguard-track4`, falling back to the OS temp directory. `setup`, `read`, `revoke`, `audit` and `protected_read` implement the published contract.
-
-```sh
-node --test track4/test/*.test.cjs
-python3.12 /path/to/Track-4-Toolkit/validate.py --entry "$PWD/track4_service.cjs"
-python3.12 track4/test/interop.py  # requires the judge’s pqcrypto==0.4.0
-```
-
-The adapter is a trusted local worker interface, not a network authentication endpoint. HTTP mutations require signed commands. The public validator checks access control, not every cryptographic property or competition score.
-
-## Operate the system
-
-Generate separate identity keys, supply their public keys and your owner/content records in a setup file, then initialize a new private state directory. The operator runbook includes complete schemas and lifecycle commands.
+Runtime: **Node 24.11.1**, including its built-in OpenSSL 3.5.4 crypto and SQLite. Supported review platforms: Linux AMD64/ARM64. macOS works for local development. Initial setup needs Git, HTTPS/curl, tar and a SHA-256 utility; tests subsequently need no network. Docker is optional for the packaged runtime. The independent organizer oracle additionally uses Python 3.12 and `pqcrypto==0.4.0`; neither is a production dependency.
 
 ```sh
-mkdir -p .local/track4-client
-node track4/cli.cjs keygen --out .local/track4-client/operator-key.json
-node track4/cli.cjs init --state /private/path/state --input setup.json
-node track4/cli.cjs serve --state /private/path/state --port 8444
-node track4/cli.cjs dashboard --url http://127.0.0.1:8444 --actor YOUR_OPERATOR --key .local/track4-client/operator-key.json
+git clone https://github.com/lokendra005/KeyGuard_Devforge.git
+cd KeyGuard_Devforge
+./scripts/install-node.sh
+export PATH="$PWD/.cache/node/current/bin:$PATH"
+./scripts/demo.sh
 ```
 
-Paste the returned observer token into the dashboard at the service root. It displays real file metadata, current keys, detector evidence and signed access history. Private signing keys never enter the browser.
+The installer verifies pinned hashes from the [official Node 24.11.1 release](https://nodejs.org/download/release/v24.11.1/SHASUMS256.txt). It installs inside the ignored project cache, without modifying system Node. `demo.sh` executes all regression tests, independent signature vectors, the synthetic detector evaluation, performance sampling and an explicit map of all 12 goals. Session resumption is reported as unsupported, not counted as a pass.
 
-Loopback development can use HTTP. Other bindings require TLS and an explicit public origin. `Dockerfile.track4` and `compose.track4.yaml` provide a read-only, unprivileged deployment with explicit state/TLS mounts. The reviewer archive includes Linux ARM64/AMD64 Node images: `./scripts/track4-review.sh --docker` loads them locally and tests with networking disabled and a read-only root. It touches no running authority.
+## Start a working authority and dashboard
 
-## Assurance boundaries
+```sh
+mkdir -p .local
+node track4/examples/init.cjs .local/example
+node track4/cli.cjs init --state .local/authority --input .local/example/setup.json
+node track4/cli.cjs serve --state .local/authority --port 8444
+```
 
-Nodes share one SQLite authority; this is not geographically distributed consensus. Messaging keeps ephemeral receiver keys in memory and intentionally does not implement session resumption. Forward secrecy depends on endpoint integrity and ephemeral-key disposal; JavaScript cannot prove physical memory erasure. Backup rollback detection needs an independently retained checkpoint.
+The example generator writes fresh keys and an editable **setup.json** with owners, contents and public identities. In a second terminal:
 
-Tests and mathematical arguments are evidence under explicit assumptions, not proof of every program path or a prediction of hidden-test scores. Public-repository eligibility and the required final brief/video remain separate submission obligations.
+```sh
+node track4/cli.cjs dashboard --url http://127.0.0.1:8444 \
+  --actor operator --key .local/example/operator.json
+```
+
+Open `http://127.0.0.1:8444` and paste the returned observer token. The dashboard shows real resources, identity state, detector evidence and audit checkpoints. To make a signed read:
+
+```sh
+printf '%s\n' '{"op":"read","actor":"owner","asset":"document","request_id":"first-read"}' > .local/read.json
+node track4/cli.cjs request --url http://127.0.0.1:8444 \
+  --actor owner --key .local/example/owner.json --body .local/read.json
+```
+
+Example IDs/content are editable. Private keys stay outside Git and outside the browser. Re-running the generator refuses to overwrite keys; production initialization refuses to replace existing state. The trusted judge adapter's `setup` instead resets its scenario transactionally. Non-loopback serving requires TLS and an explicit origin.
+
+## Algorithms and measured limits
+
+| Property | Implementation / measured result |
+|---|---|
+| Protected read | ML-KEM-768 plus exact organizer HMAC-SHA-256 challenge/content proof |
+| Identity commands | ML-DSA-65, canonical JSON, epoch + nonce + expiry |
+| Rotation grace | Configurable 0-60 seconds; partial transfers continue only while both peer keys remain valid |
+| Independent-node revocation | Lease default 5 seconds; conditional authorization bound `L/(1-rho)` for monotonic clock drift bound `rho`; five-node ARM64 sample L=3000 ms: p50 308 ms, p99/max 3004 ms (includes polling) |
+| Audit | Signed SHA-384 chain; external rollback checkpoint; first correlation decision retained; suffix verification for status |
+| Detector | Frozen-reference frequency baseline, role-state/approval/revocation rules and time-decayed connected paths; no ML |
+| Timing envelope | Default +/-300-second measured offset; 120-second lateness; raw timestamps and uncertainty retained |
+| Synthetic holdout | 4,000 reference + 12,000 held-out events; F1 **0.9412**, TP 960 / FP 0 / FN 120 / TN 10,920 |
+| Median alert delay | **83,109.5 ms**, receipt-derived with injected delays up to 120 s; not CPU latency |
+| False-alerted events / 1,000 benign | **0** on this synthetic holdout; not a production accuracy claim |
+
+The held-out generator renames services, actions and roles and includes benign novelty, skew, late arrivals and known misses. Training/evaluation windows cannot overlap. An isolated stolen-credential access can remain indistinguishable from a legitimate novel path; the detector does not hide that false-negative tradeoff.
+
+## Containers and offline review
+
+`docker build -t keyguard-track4 .` works from a clean clone; it does not require prebuilt files in `dist/`. The exact base digest is pinned. `compose.yaml` supplies the authoritative TLS API; `compose.replicas.yaml` adds separately mounted read nodes. See the runbook for certificates, origins, credentials and state ownership.
+
+The [review-v2 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v2) includes a checksummed reviewer bundle with both runtime images. Extract it, run `sha256sum -c SHA256SUMS`, then `./scripts/demo.sh --docker`. Tests run unprivileged with networking disabled, a read-only root/source and temporary writable state. Committed logs remain available without downloading that bundle. `scripts/collect-evidence.sh` regenerates them.
+
+## Security boundaries
+
+The trusted worker is local, not an unsigned network API. The authority and replica hosts are trusted; the relay alone cannot decrypt client messages. Master keys live beside their databases, so encryption at rest protects a **database-only leak**, not theft of the entire state directory. Lease guarantees assume a progressing monotonic clock, including host suspension; queued network bytes can arrive after authorization expires. Lost receiver state requires a new ephemeral offer. Unpublished judge tests and independent cryptographic certification are not claimed.
+
+The optional Go/PostgreSQL implementation is contained under [legacy/](legacy/README.md), outside the default build and reviewer bundle. Its provenance and repository history remain visible; no eligibility claim is inferred from directory layout.

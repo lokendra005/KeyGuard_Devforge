@@ -2,7 +2,23 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const { DatabaseSync } = require("node:sqlite");
+// Silence only the documented SQLite notice; preserve every other diagnostic.
+const emitWarning = process.emitWarning;
+let DatabaseSync;
+try {
+  process.emitWarning = function (message, type, ...args) {
+    if (
+      type === "ExperimentalWarning" &&
+      message ===
+        "SQLite is an experimental feature and might change at any time"
+    )
+      return;
+    return emitWarning.call(process, message, type, ...args);
+  };
+  ({ DatabaseSync } = require("node:sqlite"));
+} finally {
+  process.emitWarning = emitWarning;
+}
 const C = require("./crypto.cjs");
 
 const TABLES = [
@@ -63,7 +79,11 @@ function writeExclusive(file, bytes) {
 class Store {
   constructor(options = {}) {
     this.dir = directory(options.directory);
-    this.clock = options.clock || Date.now;
+    const monotonic = options.monotonic || (() => performance.now());
+    this.wallClock = options.wallClock || Date.now;
+    const wall = this.wallClock(),
+      mono = monotonic();
+    this.clock = options.clock || (() => Math.floor(wall + monotonic() - mono));
     this.node = options.node || process.env.KIG_NODE_ID || os.hostname();
     C.text(this.node, 256);
     const dbfile = path.join(this.dir, "authority.sqlite");
@@ -148,6 +168,7 @@ class Store {
           this.get("authority"),
         ]),
       );
+      this.loadedAuthority = this.get("authority");
       C.check(
         C.verify(
           this.audit.public_key,
@@ -184,7 +205,17 @@ class Store {
   }
   transaction(fn) {
     this.db.exec("BEGIN IMMEDIATE");
+    const previous = {
+      audit: this.audit,
+      authority: this.loadedAuthority,
+      checkpoint: this.verifiedCheckpoint,
+    };
     try {
+      if (this.audit)
+        C.check(
+          this.loadedAuthority === this.get("authority"),
+          "AUTHORITY_CHANGED",
+        );
       const now = C.integer(this.clock(), 0, Number.MAX_SAFE_INTEGER);
       C.check(now >= (this.get("last_time") || 0), "CLOCK_REGRESSION");
       const result = fn(now);
@@ -193,6 +224,9 @@ class Store {
       return result;
     } catch (e) {
       this.db.exec("ROLLBACK");
+      this.audit = previous.audit;
+      this.loadedAuthority = previous.authority;
+      this.verifiedCheckpoint = previous.checkpoint;
       throw e;
     }
   }
@@ -202,7 +236,19 @@ class Store {
       .get();
     const seq = last ? last.seq + 1 : 1;
     const previous = last ? last.hash : "";
-    C.check(seq <= this.policy().max_events, "AUDIT_CAPACITY");
+    // The soft budget stops data operations, never revocation/recovery or evidence preservation.
+    C.check(
+      seq <= this.policy().max_events ||
+        [
+          "revoke",
+          "rotate",
+          "recover",
+          "role.set",
+          "backup",
+          "policy.budget",
+        ].includes(action),
+      "AUDIT_CAPACITY",
+    );
     const payload = {
       authority: this.get("authority"),
       seq,
@@ -224,6 +270,37 @@ class Store {
   }
   policy() {
     return this.get("policy");
+  }
+  denial(reason) {
+    this.transaction((now) => {
+      const minute = Math.floor(now / 60000);
+      const buckets = (this.get("denial_counters") || []).filter(
+        (b) => b.minute > minute - 60,
+      );
+      let bucket = buckets.find((b) => b.minute === minute);
+      if (!bucket) {
+        bucket = { minute, count: 0 };
+        buckets.push(bucket);
+      }
+      bucket.count++;
+      this.set("denial_counters", buckets);
+    });
+  }
+  checkpoint() {
+    const cached = this.verifiedCheckpoint;
+    if (cached) {
+      const row = this.db
+        .prepare("SELECT hash FROM events WHERE seq=?")
+        .get(cached.seq);
+      C.check(row && row.hash === cached.hash, "BROKEN_LOG");
+    }
+    const bundle = this.evidence(cached);
+    this.verifiedCheckpoint = verifyEvidence(
+      bundle,
+      this.audit.public_key,
+      cached,
+    );
+    return this.verifiedCheckpoint;
   }
   file(row) {
     return C.open(this.master, C.parse(row.packet), [
@@ -248,14 +325,15 @@ class Store {
       )
       .run(id, owner, version, C.canonical(packet));
   }
-  evidence() {
+  evidence(prefix) {
     return {
       version: 1,
       authority: this.get("authority"),
       public_key: this.audit.public_key,
+      ...(prefix ? { prefix } : {}),
       events: this.db
-        .prepare("SELECT * FROM events ORDER BY seq")
-        .all()
+        .prepare("SELECT * FROM events WHERE seq>? ORDER BY seq")
+        .all(prefix ? prefix.seq : 0)
         .map((r) => ({ ...r, payload: C.parse(r.payload) })),
     };
   }
@@ -272,9 +350,17 @@ function verifyEvidence(bundle, trustedKey, anchor) {
       Array.isArray(bundle.events),
     "UNTRUSTED_LOG",
   );
-  let previous = "";
-  let seq = 0;
-  let time = 0;
+  if (bundle.prefix)
+    C.check(
+      anchor &&
+        C.digest(bundle.prefix) === C.digest(anchor) &&
+        anchor.public_key === trustedKey &&
+        anchor.authority === bundle.authority,
+      "UNTRUSTED_PREFIX",
+    );
+  let previous = bundle.prefix ? anchor.hash : "";
+  let seq = bundle.prefix ? anchor.seq : 0;
+  let time = bundle.prefix ? anchor.time_ms || 0 : 0;
   for (const event of bundle.events) {
     seq++;
     C.check(
@@ -313,6 +399,14 @@ function verifyEvidence(bundle, trustedKey, anchor) {
     public_key: trustedKey,
     seq,
     hash: previous,
+    time_ms: time,
   };
 }
-module.exports = { Store, verifyEvidence, TABLES, writeExclusive, directory };
+module.exports = {
+  Store,
+  verifyEvidence,
+  TABLES,
+  writeExclusive,
+  directory,
+  DatabaseSync,
+};

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-export PATH="$PWD/.cache/toolchain/bin:$PATH"
+export PATH="$PWD/../.cache/toolchain/bin:$PATH"
 export GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local
 export GOCACHE="${GOCACHE:-$PWD/.cache/build}"
 export GOFLAGS=-mod=vendor

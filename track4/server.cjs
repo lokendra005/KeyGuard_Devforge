@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const C = require("./crypto.cjs");
 const { Store } = require("./store.cjs");
-const { execute, info } = require("./service.cjs");
+const { execute } = require("./service.cjs");
 
 function server(options = {}) {
   const host = options.host || "127.0.0.1";
@@ -15,12 +15,16 @@ function server(options = {}) {
     "TLS_AND_ORIGIN_REQUIRED",
   );
   C.check(!!options.cert === !!options.tlsKey, "TLS_CONFIG_REQUIRED");
-  const store = new Store({
-    directory: options.directory,
-    node: options.node,
-    anchor: options.anchor,
-  });
+  const store =
+    options.replica ||
+    new Store({
+      directory: options.directory,
+      node: options.node,
+      anchor: options.anchor,
+    });
   C.check(store.get("authority"), "NOT_INITIALIZED");
+  const run = (input, auth) =>
+    options.replica ? store.execute(input, auth) : execute(store, input, auth);
   const assets = new Map([
     ["/", ["index.html", "text/html; charset=utf-8"]],
     ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
@@ -37,12 +41,13 @@ function server(options = {}) {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader("Cache-Control", "no-store");
-    function send(code, body) {
+    function send(code, body, requireLease = false) {
       const encoded = JSON.stringify(body);
       C.check(
         Buffer.byteLength(encoded) <= 16 * 1024 * 1024,
         "RESPONSE_CAPACITY",
       );
+      if (requireLease) C.check(store.ready(), "LEASE_EXPIRED");
       res.writeHead(code, { "Content-Type": "application/json" });
       res.end(encoded);
     }
@@ -76,16 +81,22 @@ function server(options = {}) {
         return;
       }
       if (req.method === "GET" && url.pathname === "/healthz") {
-        send(200, { ready: store.db.prepare("SELECT 1 AS ok").get().ok === 1 });
+        const ready = options.replica
+          ? store.ready()
+          : store.db.prepare("SELECT 1 AS ok").get().ok === 1;
+        send(ready ? 200 : 503, { ready });
         return;
       }
       if (req.method === "GET" && url.pathname === "/v1/identity") {
-        send(
-          200,
-          store.transaction(() =>
-            info(store, C.text(url.searchParams.get("actor"))),
-          ),
-        );
+        send(403, { error: "UNAUTHORIZED" });
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/v1/context") {
+        send(200, {
+          version: 1,
+          authority: store.get("authority"),
+          request_lifetime_ms: store.policy().request_lifetime_ms,
+        });
         return;
       }
       if (
@@ -99,8 +110,7 @@ function server(options = {}) {
         );
         send(
           200,
-          execute(
-            store,
+          run(
             { op: url.pathname.slice(4) },
             { observer: req.headers.authorization.slice(7) },
           ),
@@ -108,7 +118,8 @@ function server(options = {}) {
         return;
       }
       C.check(
-        req.method === "POST" && url.pathname === "/v1/command",
+        req.method === "POST" &&
+          ["/v1/command", "/v1/identity"].includes(url.pathname),
         "NOT_FOUND",
       );
       C.check(
@@ -125,7 +136,11 @@ function server(options = {}) {
         chunks.push(chunk);
       }
       const envelope = C.object(C.parse(Buffer.concat(chunks)));
-      send(200, execute(store, envelope));
+      send(
+        200,
+        run(envelope, { bootstrap: url.pathname === "/v1/identity" }),
+        !!options.replica,
+      );
     } catch (error) {
       if (!res.headersSent) {
         const code = error instanceof C.Fault ? error.code : "REQUEST_FAILED";

@@ -1,0 +1,1 @@
+PASS: actual TLS 1.3 API, explicit CA trust, rejection of untrusted certificate and non-loopback plaintext configuration.

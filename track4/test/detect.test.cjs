@@ -38,6 +38,7 @@ test("detector uses approval identity, role and interval, never labels or fixed 
       {
         approval_id: id,
         subject: actor,
+        approved_by: "independent-custodian",
         operation: "grant_role",
         role: "writer",
         valid_from_utc: new Date(now - 10).toISOString(),
@@ -101,6 +102,7 @@ test("clock normalization preserves raw evidence, flags uncertain order and hand
   const role = event("change", now, {
     actor,
     action: "role_change",
+    role_after: "writer",
     outcome: "success",
     received_time_utc: new Date(now + 10000).toISOString(),
   });

@@ -1,6 +1,6 @@
 **
+!track4/
+!track4/**
+!track4_service.cjs
+!threat-model.json
 !Dockerfile
-!dist/
-dist/*
-!dist/kig-linux-amd64
-!dist/kig-linux-arm64

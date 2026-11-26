@@ -12,10 +12,7 @@ C.check(
 const corpus = JSON.parse(
   zlib.gunzipSync(
     fs.readFileSync(
-      path.resolve(
-        __dirname,
-        "../../internal/guard/testdata/crypto-vectors.json.gz",
-      ),
+      path.resolve(__dirname, "../testdata/crypto-vectors.json.gz"),
     ),
   ),
 );

@@ -1,54 +1,44 @@
-# Key Identity Guard: offline reviewer runbook
+# Offline reviewer runbook
 
-The root `track4_service.cjs` implements the official Track 4 adapter. Start with this service for the competition workflow. The retained Go ledger is a separate optional implementation with its own protocol/history; it is not the adapter backend.
+## Source checkout
 
-## Verify and run the packaged system
-
-Extract `keyguard-reviewer.tar.gz` into an empty directory, then:
+Install Node 24.11.1 using `scripts/install-node.sh` (verified official hashes), or provide that runtime yourself. Production/test code uses Node built-ins only. From the repository root:
 
 ```sh
-sha256sum -c SHA256SUMS
-./scripts/track4-review.sh --docker
+./scripts/demo.sh
 ```
 
-The script loads the bundled architecture-specific Node 24.11.1 image, uses `--pull never`, and runs the complete Track 4 suite with networking disabled, read-only root/source, an unprivileged user, dropped capabilities, a memory limit and temporary writable state. Docker must already be available. No live deployment or existing keys are touched. Set `KIG_REVIEW_ARCH=amd64` or `arm64` to select a particular image.
+This runs the real core, HTTP/CLI delivery, independent-node leases, actual SIGKILL crash recovery, malformed-input and migration/rotation adversarial tests, 225 independent ML-DSA vectors, a 12,000-event synthetic detector holdout and performance measurements. It creates only disposable test state. No external API key is needed.
 
-In the organizer runtime, no Docker or dependency installation is needed:
+For the organizer's independently supplied toolkit and Python environment:
 
 ```sh
-node --test track4/test/*.test.cjs
-python3.12 /path/to/toolkit/validate.py --entry "$PWD/track4_service.cjs"
+python3.12 /path/to/Track-4-Toolkit/validate.py --entry "$PWD/track4_service.cjs"
 python3.12 track4/test/interop.py
 ```
 
-The independent interop test uses the supplied `pqcrypto==0.4.0`. Our runtime uses Node built-ins only. The separate `track4-official-toolkit.tar.gz` is an unmodified export of organizer commit `8901dfbdbfe048853e0bfa25b60583d1e6617a63`; keep it outside your submitted repository. Its validator does not award points or test the protected-read KEM exchange.
+The second command requires the organizer's `pqcrypto==0.4.0`. It generates 16 independent ML-KEM keypairs, decapsulates the actual adapter response and recomputes the exact HMAC. The toolkit is pinned at commit `8901dfbdbfe048853e0bfa25b60583d1e6617a63`; its public validator does not award scores or test all competition goals.
 
-To run that unmodified checker against an actual fresh Linux container for every call, load the appropriate packaged image, then use `--entry "$PWD/scripts/track4-container-adapter.cjs"`. That script transports stdin/stdout to the real root adapter; it contains no policy or answers. The independent oracle can use the same transport:
+The root adapter accepts one JSON request and returns one JSON response per process. State persists under `TRACK4_STATE_DIR/keyguard-track4` (OS temp directory fallback). Trusted worker setup atomically resets that scenario; malformed setup leaves the prior scenario intact. Expected validation/policy errors return structured JSON with exit zero; unexpected internal/storage errors remain nonzero. CLI initialization never performs this scenario reset. SQLite's specific experimental notice is suppressed without suppressing unrelated warnings.
 
-```sh
-NODE="$PWD/scripts/track4-container-adapter.cjs" python3.12 track4/test/interop.py
-```
+## Packaged offline runtime
 
-## What the tests establish
-
-Read [TRACK4_VALIDATION.md](TRACK4_VALIDATION.md) for exact observed results and limitations. Packaged `validation/track4-*.log` files record the host, Linux architectures, official validator, independent interop, TLS, detection and performance checks. Test identities/keys are generated at runtime; the archive contains no live authority database or operator keys.
-
-The suite checks actual SIGKILL recovery, cutoff boundaries, competing recovery proposals, malformed encodings, read retry after revocation, permission changes, tampered evidence/backups, opaque identifiers including embedded NULs, ciphertext-only relay behavior and real CLI delivery. It deliberately reports failure rather than substituting a mock crypto backend or treating skipped checks as passes.
-
-Open the dashboard with the [operator runbook](TRACK4_OPERATIONS.md). Its actions reach the same core used by the adapter. The [design document](TRACK4_DESIGN.md) specifies state, cryptographic transcripts, mathematical assumptions and unsupported cases. Session resumption is intentionally absent; a lost receiver process must publish a new ephemeral offer.
-
-## Retained Go ledger
-
-The original ledger source, vendored dependencies, six Linux binaries and PostgreSQL images remain in the archive. To repeat that independent suite:
+Download `keyguard-reviewer.tar.gz` and `REVIEWER-SHA256SUMS` from the [review-v2 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v2). Verify the archive, extract into an empty directory, then:
 
 ```sh
-./scripts/offline-review.sh --docker
+sha256sum -c SHA256SUMS
+./scripts/demo.sh --docker
+KIG_REVIEW_ARCH=amd64 ./scripts/demo.sh --docker
 ```
 
-It needs Docker and uses an isolated database/internal network, followed by a separate network-disabled migration/TLS workflow. Optional OpenSSL checks may skip inside that PostgreSQL image; existing host interop evidence is recorded separately. The v2 SHA-384 migration remains explicit and preserves its own key/history formats. This build does not execute a pending live migration.
+Docker must already be installed. Both Node 24.11.1 images are bundled; no pull or package installation occurs during review. The runner uses `--network none`, an unprivileged UID, a read-only root/source, dropped capabilities and writable tmpfs. Socket tests use container-local loopback. To run only regressions/vectors use `scripts/track4-review.sh --docker`.
 
-## Submission obligations outside automated tests
+`scripts/track4-container-adapter.cjs` contains no policy implementation; it transports stdin/stdout to the root adapter in a fresh Linux container. With the packaged image loaded, the external validator can use this path as `--entry`. Set `NODE="$PWD/scripts/track4-container-adapter.cjs"` for the Python oracle to use the same transport.
 
-The organizers require a qualifying public repository and a maximum two-page PDF containing the threat model and accessible five-minute fallback video link. This build does not publish a repository, invent a video link or verify hackathon creation eligibility. Complete those materials separately. Hidden worker tests and official scores are unavailable; passing public and local tests is not organizer acceptance.
+## Evidence and deliverables
 
-Authenticate the archive checksum through an independent trusted channel. Checksums alone detect corruption, not a malicious replacement of both archive and checksum.
+[Committed evidence](../evidence/README.md) includes architecture-specific runs, the public validator, independent oracle and held-out detector metrics. `scripts/collect-evidence.sh --docker` regenerates the local checks; set `TOOLKIT_DIR` and `PYTHON` to include external toolkit/oracle checks. Each run uses fresh generated identities; no private keys or authority state are in Git or the bundle.
+
+The [two-page brief](KeyGuard-brief.pdf) contains architecture, threat model and the accessible five-minute fallback video link. The [operator runbook](TRACK4_OPERATIONS.md) supplies initialization, real signed actions, messaging, recovery, TLS and independent-node deployment. [Design arguments](TRACK4_DESIGN.md) distinguish mathematical assumptions from empirical tests.
+
+Session resumption is deliberately unsupported, and the isolated-access detector blind spot is measured. Synthetic metrics, public-validator results and local tests are not hidden-worker scores or security certification. Authenticate release checksums through an independent channel; replacing an archive and its checksum together defeats checksums alone.

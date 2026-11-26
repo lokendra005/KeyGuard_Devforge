@@ -59,24 +59,36 @@ function client(base, identity, actor, ca) {
       r.end(data);
     });
   }
-  return {
-    request,
-    info: (who) => request("/v1/identity?actor=" + encodeURIComponent(who)),
-    prepare: async (body) =>
-      command(
-        identity,
-        await request("/v1/identity?actor=" + encodeURIComponent(actor)),
+  async function info(who) {
+    if (who !== actor) return call({ op: "info", actor: who });
+    C.check(identity, "IDENTITY_REQUIRED");
+    const context = await request("/v1/context");
+    const envelope = command(
+      identity,
+      { ...context, actor, epoch: 0 },
+      { op: "info", actor },
+    );
+    const { signature, ...body } = envelope;
+    return request("/v1/identity", {
+      ...body,
+      signature: C.sign(
+        identity.private_key,
+        "KIG/identity-bootstrap/v1",
         body,
       ),
-    call: async (body) =>
-      request(
-        "/v1/command",
-        command(
-          identity,
-          await request("/v1/identity?actor=" + encodeURIComponent(actor)),
-          body,
-        ),
-      ),
+    });
+  }
+  async function prepare(body) {
+    return command(identity, await info(actor), body);
+  }
+  async function call(body) {
+    return request("/v1/command", await prepare(body));
+  }
+  return {
+    request,
+    info,
+    prepare,
+    call,
   };
 }
 module.exports = { client };

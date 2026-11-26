@@ -1,0 +1,1 @@
+PASS: 16 independently generated pqcrypto ML-KEM-768 keys; decapsulation/HMAC interoperability, wrong-key/content, replay and post-revocation denial.

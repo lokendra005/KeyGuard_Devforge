@@ -18,7 +18,10 @@ try {
   const request = C.object(C.parse(Buffer.concat(chunks)));
   store = new Store();
   // This local worker boundary is trusted. Network callers must use signed commands.
-  const result = execute(store, request, { trusted: true });
+  const result = execute(store, request, {
+    trusted: true,
+    resetScenario: request.op === "setup",
+  });
   process.stdout.write(C.canonical(result) + "\n");
 } catch (error) {
   process.stdout.write(
@@ -26,7 +29,12 @@ try {
       error: error instanceof C.Fault ? error.code : "REQUEST_FAILED",
     }) + "\n",
   );
-  process.exitCode = 1;
+  process.exitCode =
+    error instanceof C.Fault ||
+    error instanceof SyntaxError ||
+    error instanceof TypeError
+      ? 0
+      : 1;
 } finally {
   if (store) store.close();
 }

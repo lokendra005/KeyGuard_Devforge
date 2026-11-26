@@ -4,60 +4,45 @@ const DEFAULT_POLICY = Object.freeze({
   max_files: 10000,
   max_body_bytes: 1048576,
   max_storage_bytes: 16777216,
-  max_events: 10000,
+  max_events: 1000000,
   max_grace_ms: 60000,
   request_lifetime_ms: 120000,
   mailbox_lifetime_ms: 300000,
   max_mail: 1000,
+  max_mail_per_actor: 32,
+  replay_window_ms: 120000,
 });
-const ROLES = new Set(["user", "auditor", "admin", "recovery"]);
+const ROLES = new Set(["user", "auditor", "admin", "recovery", "replicator"]);
 function isAdmin(auth) {
   return auth.trusted || auth.role === "admin";
 }
 function requireAdmin(auth) {
   C.check(isAdmin(auth), "FORBIDDEN");
 }
-function authenticate(store, envelope, now) {
+function authenticate(store, envelope, now, bootstrap = false) {
   C.object(envelope);
-  const { signature, ...request } = envelope;
-  C.check(
-    Object.keys(request).sort().join(",") ===
-      "actor,authority,body,epoch,expires,key_id,nonce,version",
-    "INVALID_ENVELOPE",
+  const auth = require("./auth.cjs").verifyCommand(
+    envelope,
+    {
+      authority: store.get("authority"),
+      policy: store.policy(),
+      actor: store.db
+        .prepare("SELECT * FROM actors WHERE id=?")
+        .get(C.text(envelope.actor)),
+      key: store.db
+        .prepare("SELECT * FROM keys WHERE id=?")
+        .get(C.text(envelope.key_id)),
+    },
+    now,
+    bootstrap,
   );
-  C.check(
-    request.version === 1 && request.authority === store.get("authority"),
-    "WRONG_AUTHORITY",
-  );
-  C.text(request.actor);
-  C.text(request.key_id, 96);
-  C.text(request.nonce, 128);
-  C.check(request.nonce.length >= 16, "INVALID_NONCE");
-  C.integer(request.expires, now, now + store.policy().request_lifetime_ms);
-  const actor = store.db
-    .prepare("SELECT * FROM actors WHERE id=?")
-    .get(request.actor);
-  const key = store.db
-    .prepare("SELECT * FROM keys WHERE id=?")
-    .get(request.key_id);
-  C.check(actor && key && key.actor === actor.id, "UNAUTHORIZED");
-  C.check(
-    C.verify(key.public_key, "KIG/command/v1", request, signature),
-    "INVALID_SIGNATURE",
-  );
-  if (
-    actor.disabled ||
-    key.revoked ||
-    now < key.not_before ||
-    (key.not_after !== null && now >= key.not_after) ||
-    request.epoch !== actor.epoch
-  ) {
-    const error = new C.Fault("UNAUTHORIZED");
-    error.verifiedActor = actor.id;
-    throw error;
-  }
+  const request = envelope;
   store.db.prepare("DELETE FROM nonces WHERE expires<?").run(now);
-  const nonceID = C.digest(["command", key.id, request.nonce]);
+  const nonceID = C.digest([
+    bootstrap ? "bootstrap" : "command",
+    auth.key_id,
+    request.nonce,
+  ]);
   C.check(
     !store.db.prepare("SELECT id FROM nonces WHERE id=?").get(nonceID),
     "REPLAY",
@@ -65,13 +50,7 @@ function authenticate(store, envelope, now) {
   store.db
     .prepare("INSERT INTO nonces VALUES(?,?)")
     .run(nonceID, request.expires);
-  return {
-    actor: actor.id,
-    role: actor.role,
-    key_id: key.id,
-    body: C.object(request.body),
-    trusted: false,
-  };
+  return auth;
 }
 function installKey(store, actor, public_key, now) {
   const id = C.keyID(public_key);
@@ -88,7 +67,10 @@ function setup(store, request, now) {
   C.check(!store.get("authority"), "ALREADY_INITIALIZED");
   C.object(request.owners);
   C.object(request.contents);
-  C.check(Array.isArray(request.disabled), "INVALID_INPUT");
+  C.check(
+    request.disabled === undefined || Array.isArray(request.disabled),
+    "INVALID_INPUT",
+  );
   C.text(request.key_material, 1048576);
   const policy = { ...DEFAULT_POLICY, ...C.object(request.policy || {}) };
   C.check(
@@ -100,7 +82,7 @@ function setup(store, request, now) {
     C.integer(
       value,
       key === "max_grace_ms" ? 0 : key.endsWith("lifetime_ms") ? 1000 : 1,
-      DEFAULT_POLICY[key],
+      key === "max_events" ? 1000000000 : DEFAULT_POLICY[key],
     );
   const assets = Object.keys(request.owners);
   C.check(
@@ -112,6 +94,7 @@ function setup(store, request, now) {
   const authority = C.random();
   store.set("schema", 1);
   store.set("authority", authority);
+  store.loadedAuthority = authority;
   store.set("policy", policy);
   store.set("master_commitment", C.hash(store.master));
   store.audit = C.generate();
@@ -161,7 +144,7 @@ function setup(store, request, now) {
       .get().bytes <= policy.max_storage_bytes,
     "STORAGE_CAPACITY",
   );
-  for (const actor of request.disabled) {
+  for (const actor of request.disabled || []) {
     C.text(actor);
     store.db
       .prepare("INSERT OR IGNORE INTO actors VALUES(?,?,0,1)")
@@ -227,15 +210,74 @@ function executeTransaction(store, input, options = {}) {
     } else
       auth = options.trusted
         ? { trusted: true, actor: "local-operator", role: "admin" }
-        : authenticate(store, input, now);
+        : authenticate(store, input, now, options.bootstrap);
     const request = options.trusted ? input : auth.body;
     const op = C.text(request.op, 64);
     if (op === "setup") {
       C.check(auth.trusted, "FORBIDDEN");
+      if (options.resetScenario) {
+        for (const table of [...require("./store.cjs").TABLES].reverse())
+          store.db.exec("DELETE FROM " + table);
+        store.verifiedCheckpoint = undefined;
+      }
       return setup(store, request, now);
     }
     C.check(store.get("authority"), "NOT_INITIALIZED");
     const db = store.db;
+    if (op === "replica.sync") {
+      C.check(isAdmin(auth) || auth.role === "replicator", "FORBIDDEN");
+      C.text(request.node_id, 256);
+      C.text(request.nonce, 128);
+      C.check(request.nonce.length >= 16, "INVALID_NONCE");
+      C.keyID(request.node_public_key);
+      const lease = C.integer(request.lease_ms, 100, 60000);
+      if (request.prefix) {
+        const p = request.prefix;
+        const row = db
+          .prepare("SELECT hash FROM events WHERE seq=?")
+          .get(C.integer(p.seq, 1, Number.MAX_SAFE_INTEGER));
+        C.check(
+          p.authority === store.get("authority") &&
+            p.public_key === store.audit.public_key &&
+            row &&
+            row.hash === p.hash,
+          "REPLICA_FORK",
+        );
+      }
+      const evidence = store.evidence(request.prefix);
+      const checkpoint = store.checkpoint();
+      const body = {
+        version: 1,
+        authority: store.get("authority"),
+        node_id: request.node_id,
+        nonce: request.nonce,
+        node_public_key: request.node_public_key,
+        lease_ms: lease,
+        issued_ms: now,
+        checkpoint,
+        evidence,
+        policy: store.policy(),
+        actors: db.prepare("SELECT * FROM actors").all(),
+        keys: db.prepare("SELECT * FROM keys").all(),
+        files: db
+          .prepare("SELECT * FROM files")
+          .all()
+          .map((row) => ({
+            id: row.id,
+            owner: row.owner,
+            version: row.version,
+            body: store.file(row),
+          })),
+      };
+      return {
+        body,
+        signature: C.sign(
+          store.audit.private_key,
+          "KIG/replica-grant/v1",
+          body,
+        ),
+      };
+    }
     if (op === "read" || op === "protected_read") {
       const actor = C.text(request.actor);
       const asset = C.text(request.asset);
@@ -259,7 +301,7 @@ function executeTransaction(store, input, options = {}) {
           "REQUEST_ID_CONFLICT",
         );
         db.prepare(
-          "INSERT INTO reads VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET decision=excluded.decision",
+          "INSERT INTO reads VALUES(?,?,?,?) ON CONFLICT(id) DO NOTHING",
         ).run(id, actor, asset, decision);
         store.record(now, op, actor, { asset, request_id: id, decision });
         return allowed ? { decision, body: store.file(file) } : { decision };
@@ -277,6 +319,7 @@ function executeTransaction(store, input, options = {}) {
         request.challenge,
         request.public_key,
       ]);
+      db.prepare("DELETE FROM nonces WHERE expires<?").run(now);
       C.check(
         !db.prepare("SELECT id FROM nonces WHERE id=?").get(id),
         "REPLAY",
@@ -288,7 +331,7 @@ function executeTransaction(store, input, options = {}) {
       );
       db.prepare("INSERT INTO nonces VALUES(?,?)").run(
         id,
-        Number.MAX_SAFE_INTEGER,
+        now + (store.policy().replay_window_ms || 120000),
       );
       store.record(now, op, actor, {
         asset,
@@ -464,7 +507,6 @@ function executeTransaction(store, input, options = {}) {
       ).run(cutoff, cutoff, actor);
       const key_id = installKey(store, actor, request.new_public_key, now);
       db.prepare("UPDATE actors SET epoch=epoch+1 WHERE id=?").run(actor);
-      db.prepare("DELETE FROM offers WHERE actor=?").run(actor);
       store.record(now, op, actor, {
         key_id,
         cutoff_ms: cutoff,
@@ -569,7 +611,8 @@ function executeTransaction(store, input, options = {}) {
         auth.trusted ||
           request.actor === auth.actor ||
           auth.role === "admin" ||
-          auth.role === "auditor",
+          auth.role === "auditor" ||
+          auth.role === "recovery",
         "FORBIDDEN",
       );
       return info(store, request.actor);
@@ -604,7 +647,15 @@ function executeTransaction(store, input, options = {}) {
         auth.trusted || auth.role === "admin" || auth.role === "auditor",
         "FORBIDDEN",
       );
-      return store.evidence();
+      return store.evidence(request.prefix);
+    }
+    if (op === "policy.budget") {
+      requireAdmin(auth);
+      const limit = C.integer(request.max_events, 1, 1000000000);
+      C.check(limit >= store.policy().max_events, "BUDGET_DECREASE");
+      store.set("policy", { ...store.policy(), max_events: limit });
+      store.record(now, op, auth.actor, { max_events: limit });
+      return { max_events: limit };
     }
     if (op === "status") {
       C.check(
@@ -628,10 +679,8 @@ function executeTransaction(store, input, options = {}) {
           .prepare("SELECT payload FROM events ORDER BY seq DESC LIMIT 100")
           .all()
           .map((r) => C.parse(r.payload)),
-        checkpoint: require("./store.cjs").verifyEvidence(
-          store.evidence(),
-          store.audit.public_key,
-        ),
+        checkpoint: store.checkpoint(),
+        denial_counters: store.get("denial_counters") || [],
         detection: store.get("detection") || null,
       };
     }
@@ -675,14 +724,7 @@ function execute(store, input, options = {}) {
   } catch (error) {
     if (!options.trusted && store.audit && error instanceof C.Fault) {
       try {
-        store.transaction((now) =>
-          store.record(
-            now,
-            "request.denied",
-            error.verifiedActor || "unauthenticated",
-            { reason: error.code },
-          ),
-        );
+        store.denial(error.code);
       } catch {
         /* A failed authority never releases content; the original failure remains visible. */
       }

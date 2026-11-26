@@ -10,18 +10,18 @@ const Detect = require("./detect.cjs");
 const HELP = `Key Identity Guard / Track 4 (Node 24.11.1; no npm install)
   keygen --out KEY
   init --state DIR --input CONFIG
-  serve --state DIR [--host IP --port PORT --cert PEM --tls-key PEM --origin URL]
+  serve --state DIR [--host IP --port PORT --cert PEM --tls-key PEM --origin URL] [--replica CONFIG]
   local --state DIR --body JSON            trusted local administration
   request --url URL --actor ID --key KEY --body JSON [--ca PEM]
   prepare --url URL --actor ID --key KEY --body JSON --out SIGNED_JSON
   submit --url URL --input SIGNED_JSON
   enroll --url URL --actor ADMIN --key KEY --target ID --role ROLE --new-key NEW
   rotate --url URL --actor ID --key OLD --new-key NEW --grace-ms MS
-  recovery-prepare --url URL --target ID --new-key NEW --out BODY
+  recovery-prepare --url URL --actor CUSTODIAN --key KEY --target ID --new-key NEW --out BODY
   dashboard --url URL --actor ID --key KEY
   send --url URL --actor ID --key KEY --peer PUBLIC_IDENTITY --input FILE
   receive --url URL --actor ID --key KEY --peer PUBLIC_IDENTITY --out FILE
-  detect --events CSV --approvals JSON --config JSON [--labels CSV --positive-labels A,B]
+  detect --events CSV --approvals JSON --config JSON [--reference CSV] [--labels CSV --positive-labels A,B]
   backup --state DIR --password-file FILE --out BUNDLE --checkpoint CHECKPOINT
   restore --input BUNDLE --password-file FILE --state NEW_DIR --anchor CHECKPOINT
   key-backup --key KEY --password-file FILE --out BUNDLE
@@ -69,6 +69,8 @@ async function main(args = process.argv.slice(2)) {
     "checkpoint",
     "anchor",
     "trust",
+    "reference",
+    "replica",
   ];
   const { values: v, positionals } = parseArgs({
     args,
@@ -121,10 +123,16 @@ async function main(args = process.argv.slice(2)) {
     );
   }
   if (op === "detect") {
+    const config = read(v.config);
+    if (v.reference)
+      config.baseline = Detect.learn(
+        Detect.csv(fs.readFileSync(v.reference, "utf8")),
+        config,
+      );
     const report = Detect.detect(
       Detect.csv(fs.readFileSync(v.events, "utf8")),
       read(v.approvals),
-      read(v.config),
+      config,
     );
     if (v.labels)
       report.metrics = Detect.score(
@@ -138,24 +146,54 @@ async function main(args = process.argv.slice(2)) {
   if (op === "serve") {
     const host = v.host || "127.0.0.1";
     const port = C.integer(Number(v.port || 8444), 0, 65535);
-    const api = require("./server.cjs").server({
-      directory: v.state,
-      host,
-      cert: v.cert,
-      tlsKey: v["tls-key"],
-      origin: v.origin,
-      node: v.node,
-      anchor: v.anchor ? read(v.anchor) : undefined,
-    });
-    await new Promise((resolve, reject) => {
-      api.once("error", reject);
-      api.listen(port, host, resolve);
-    });
+    let replica, stopReplication;
+    if (v.replica) {
+      const config = read(v.replica);
+      const { Replica, replicate } = require("./replica.cjs");
+      replica = new Replica({
+        directory: v.state,
+        trust: read(config.trust_file),
+        node: v.node || process.env.KIG_NODE_ID || config.node_id,
+        lease_ms: config.lease_ms,
+      });
+      stopReplication = await replicate(
+        replica,
+        require("./client.cjs").client(
+          config.upstream,
+          read(config.key_file),
+          config.actor,
+          config.ca_file,
+        ),
+        config.sync_ms,
+      );
+    }
+    let api;
+    try {
+      api = require("./server.cjs").server({
+        directory: v.state,
+        host,
+        cert: v.cert,
+        tlsKey: v["tls-key"],
+        origin: v.origin,
+        node: v.node,
+        anchor: v.anchor ? read(v.anchor) : undefined,
+        replica,
+      });
+      await new Promise((resolve, reject) => {
+        api.once("error", reject);
+        api.listen(port, host, resolve);
+      });
+    } catch (error) {
+      if (stopReplication) stopReplication();
+      if (replica) replica.close();
+      throw error;
+    }
     process.stdout.write(
       JSON.stringify({ listening: api.address(), tls: !!v.cert }) + "\n",
     );
     for (const signal of ["SIGINT", "SIGTERM"])
       process.on(signal, () => {
+        if (stopReplication) stopReplication();
         api.close();
         api.closeIdleConnections();
       });

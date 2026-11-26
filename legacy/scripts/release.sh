@@ -3,7 +3,7 @@ set -eu
 # Exclude macOS metadata sidecars from portable, checksummed reviewer archives.
 export COPYFILE_DISABLE=1
 cd "$(dirname "$0")/.."
-export PATH="$PWD/.cache/toolchain/bin:$PATH"
+export PATH="$PWD/../.cache/toolchain/bin:$PATH"
 export GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local CGO_ENABLED=0
 export GOCACHE="${GOCACHE:-$PWD/.cache/build}"
 mkdir -p dist
@@ -14,7 +14,7 @@ for arch in amd64 arm64; do
 done
 go version -m dist/kig-linux-amd64 > dist/build-info.txt
 # Only explicit source paths: never package local keys, caches or generated operator state.
-tar --exclude=docs/SECRET_WARDS_PLAN.md -czf dist/keyguard-source.tar.gz go.mod go.sum vendor cmd internal spec scripts deploy docs track4 track4_service.cjs threat-model.json Makefile Dockerfile Dockerfile.track4 Dockerfile.track4.dockerignore compose.yaml compose.witnessed.yaml compose.track4.yaml README.md .github .dockerignore .gitignore
+tar --exclude=docs/SECRET_WARDS_PLAN.md -czf dist/keyguard-source.tar.gz go.mod go.sum vendor cmd internal spec scripts deploy docs Makefile Dockerfile compose.yaml compose.witnessed.yaml README.md .github
 
 (cd dist
  if command -v sha256sum >/dev/null 2>&1; then

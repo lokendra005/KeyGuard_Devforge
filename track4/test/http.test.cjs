@@ -173,3 +173,117 @@ test(
     A.equal(f.store.db.prepare("SELECT count(*) AS n FROM mail").get().n, 0);
   },
 );
+
+test("identity metadata needs proof of key possession and forged HTTP requests do not inflate the signed log", async (t) => {
+  const f = fixture(t),
+    api = server({ directory: f.directory });
+  await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        api.close(resolve);
+        api.closeAllConnections();
+      }),
+  );
+  const url = "http://127.0.0.1:" + api.address().port;
+  for (const actor of [f.actors.owner, C.random()]) {
+    const response = await fetch(
+      url + "/v1/identity?actor=" + encodeURIComponent(actor),
+    );
+    A.equal(response.status, 403);
+    A.deepEqual(await response.json(), { error: "UNAUTHORIZED" });
+  }
+  const before = f.store.evidence().events.length;
+  for (let i = 0; i < 50; i++) {
+    const response = await fetch(url + "/v1/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actor: f.actors.owner,
+        key_id: C.keyID(f.keys.owner.public_key),
+        signature: C.random(),
+      }),
+    });
+    A.notEqual(response.status, 200);
+  }
+  A.equal(f.store.evidence().events.length, before);
+  A.equal(
+    f.store.get("denial_counters").reduce((n, b) => n + b.count, 0),
+    50,
+  );
+  const owner = client(url, f.keys.owner, f.actors.owner);
+  A.equal((await owner.info(f.actors.owner)).actor, f.actors.owner);
+  await A.rejects(
+    () => owner.info(f.actors.peer),
+    (e) => e.code === "FORBIDDEN",
+  );
+});
+
+test(
+  "real HTTP replica sync serves cached signed reads and fails closed when sync stops",
+  { timeout: 10000 },
+  async (t) => {
+    const f = fixture(t),
+      origin = server({ directory: f.directory });
+    await new Promise((resolve) => origin.listen(0, "127.0.0.1", resolve));
+    t.after(
+      () =>
+        new Promise((resolve) => {
+          origin.close(resolve);
+          origin.closeAllConnections();
+        }),
+    );
+    const { Replica, replicate } = require("../replica.cjs");
+    const node = new Replica({
+      directory: path.join(f.directory, "http-node"),
+      node: C.random(),
+      trust: {
+        authority: f.store.get("authority"),
+        public_key: f.store.audit.public_key,
+      },
+      lease_ms: 2000,
+    });
+    const upstream = client(
+      "http://127.0.0.1:" + origin.address().port,
+      f.keys.admin,
+      f.actors.admin,
+    );
+    const stop = await replicate(node, upstream, 100);
+    stop();
+    const api = server({ replica: node });
+    await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+    t.after(
+      () =>
+        new Promise((resolve) => {
+          api.close(resolve);
+          api.closeAllConnections();
+        }),
+    );
+    const url = "http://127.0.0.1:" + api.address().port;
+    const owner = client(url, f.keys.owner, f.actors.owner);
+    A.equal(
+      (
+        await owner.call({
+          op: "read",
+          actor: f.actors.owner,
+          asset: f.asset,
+          request_id: C.random(),
+        })
+      ).body,
+      f.body,
+    );
+    await upstream.call({ op: "revoke", actor: f.actors.owner });
+    await new Promise((resolve) => setTimeout(resolve, 2050));
+    A.equal((await fetch(url + "/healthz")).status, 503);
+    await A.rejects(
+      () =>
+        owner.call({
+          op: "read",
+          actor: f.actors.owner,
+          asset: f.asset,
+          request_id: C.random(),
+        }),
+      (e) => e.code === "LEASE_EXPIRED",
+    );
+  },
+);

@@ -1,0 +1,1 @@
+{"result":"PASS","tls":"1.3 with explicit CA","authority_containers":1,"independent_replica_containers":3,"external_network":false,"read_before_revoke":true,"denied_after_revoke":[{"node":"node-a","observed_ms":115},{"node":"node-b","observed_ms":117},{"node":"node-c","observed_ms":121}]}

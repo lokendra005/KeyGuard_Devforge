@@ -1,0 +1,34 @@
+ACTUAL ADAPTER WALKTHROUGH | v24.11.1 | darwin/arm64
+setup (fresh randomized identity/resource; disabled omitted)
+{"ready":true}
+
+read by current owner
+{"body":"Public demonstration resource; no operator data.","decision":"allow"}
+
+protected_read (real encapsulation and local decapsulation)
+{"ciphertext_bytes":1088,"exact_hmac_verified":true}
+
+repeat protected_read
+{"error":"REPLAY","process_exit":0}
+
+revoke owner
+{"effective_at_ms":1795727968330,"revoked":true}
+
+read after revocation
+{"decision":"deny"}
+
+audit the denied request
+{"decision":"deny","request_id":"7dcbcf3073d7b9db76c15abf22a58317299ab93ebdb23070"}
+
+unknown actor revocation is a structured error
+{"error":"NOT_FOUND"}
+
+second setup in the same worker state
+{"ready":true}
+
+old scenario is inaccessible
+{"decision":"deny"}
+
+new scenario's owner can read
+{"body":"New scenario resource.","decision":"allow"}
+

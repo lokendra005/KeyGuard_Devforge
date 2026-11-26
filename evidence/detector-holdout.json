@@ -1,0 +1,33 @@
+{
+  "seed": 20261127,
+  "reference_events": 4000,
+  "heldout_events": 12000,
+  "baseline_commitment": "b88d6d98f531500386aafd1ef4d92e986fef7c30c936749f9c26799d0964dbda075e5c7ed02136c86e792c07bf11731e",
+  "elapsed_ms": 67,
+  "metrics": {
+    "unit": "event",
+    "tp": 960,
+    "fp": 0,
+    "fn": 120,
+    "tn": 10920,
+    "precision": 1,
+    "recall": 0.8888888888888888,
+    "f1": 0.9411764705882353,
+    "median_alert_latency_ms": 83109.5,
+    "false_alerted_events_per_1000_benign": 0,
+    "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+  },
+  "timing": {
+    "source_offset_range_ms": [
+      -300000,
+      300000
+    ],
+    "receipt_delay_range_ms": [
+      0,
+      120000
+    ],
+    "corrected_out_of_order_events": 9201
+  },
+  "protocol": "Fixed rules and parameters; separate earlier reference window; services, identities, roles and action names renamed by seed. Labels are passed only to score(). Synthetic, not real-world accuracy.",
+  "known_miss": "Isolated stolen-credential access is deliberately indistinguishable from benign novelty under these observations; suppressing novelty-only alarms trades recall for fewer false positives."
+}

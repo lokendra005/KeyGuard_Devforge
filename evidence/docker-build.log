@@ -1,0 +1,36 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 399B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57
+#2 DONE 0.0s
+
+#3 [internal] load build context
+#3 transferring context: 94.49kB done
+#3 DONE 0.0s
+
+#4 [1/4] FROM docker.io/library/node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57
+#4 resolve docker.io/library/node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57 done
+#4 DONE 0.0s
+
+#5 [2/4] WORKDIR /app
+#5 CACHED
+
+#6 [3/4] COPY track4 /app/track4
+#6 DONE 0.0s
+
+#7 [4/4] COPY track4_service.cjs threat-model.json /app/
+#7 DONE 0.0s
+
+#8 exporting to image
+#8 exporting layers 0.0s done
+#8 exporting manifest sha256:c6c9e395e1de78d1523fe7439f1f0bcfdd389b254ccc28a1b8eb23b85fa0d3c1
+#8 exporting manifest sha256:c6c9e395e1de78d1523fe7439f1f0bcfdd389b254ccc28a1b8eb23b85fa0d3c1 done
+#8 exporting config sha256:2d62825ad44e3ae0da46e162b9dd5622544321b3926d84c9e6fa844900125c47 done
+#8 exporting attestation manifest sha256:4b41823e4704b0147059fa6b48cc2122d63ab34ba91000d462500d4120ffb4bd done
+#8 exporting manifest list sha256:3318e5d46e9e1a88e4673f7899df068d62a777a5703844f5bad69ca25e317d85 done
+#8 naming to docker.io/library/keyguard-track4:review done
+#8 unpacking to docker.io/library/keyguard-track4:review 0.0s done
+#8 DONE 0.1s

@@ -1,0 +1,36 @@
+# Combine with compose.yaml. Each node needs its own prepared private state directory.
+x-replica: &replica
+  build:
+    context: .
+    dockerfile: Dockerfile
+  user: "${KIG_UID:-1000}:${KIG_GID:-1000}"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 64
+  mem_limit: 512m
+  tmpfs: [/tmp:rw,noexec,nosuid,size=64m]
+  command: [node, track4/cli.cjs, serve, --state, /state, --replica, /run/config/replica.json, --host, 0.0.0.0, --port, '8444', --cert, /run/config/cert.pem, --tls-key, /run/config/key.pem, --origin, "${KIG_REPLICA_ORIGIN:?Set replica HTTPS origin}"]
+  restart: unless-stopped
+services:
+  replica-a:
+    <<: *replica
+    environment: { KIG_NODE_ID: replica-a }
+    ports: ["127.0.0.1:8451:8444"]
+    volumes:
+      - "${KIG_REPLICA_A_STATE:?Set private node A state directory}:/state"
+      - "${KIG_REPLICA_CONFIG:?Set read-only config/credentials directory}:/run/config:ro"
+  replica-b:
+    <<: *replica
+    environment: { KIG_NODE_ID: replica-b }
+    ports: ["127.0.0.1:8452:8444"]
+    volumes:
+      - "${KIG_REPLICA_B_STATE:?Set private node B state directory}:/state"
+      - "${KIG_REPLICA_CONFIG:?Set read-only config/credentials directory}:/run/config:ro"
+  replica-c:
+    <<: *replica
+    environment: { KIG_NODE_ID: replica-c }
+    ports: ["127.0.0.1:8453:8444"]
+    volumes:
+      - "${KIG_REPLICA_C_STATE:?Set private node C state directory}:/state"
+      - "${KIG_REPLICA_CONFIG:?Set read-only config/credentials directory}:/run/config:ro"
