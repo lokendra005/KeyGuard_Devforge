@@ -1,0 +1,6 @@
+**
+!track4/
+!track4/**
+!track4_service.cjs
+!threat-model.json
+!Dockerfile.track4

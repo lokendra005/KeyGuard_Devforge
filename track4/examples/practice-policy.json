@@ -1,0 +1,14 @@
+{
+  "allowed_edges": [
+    ["*", "portal", "catalog", "read"],
+    ["*", "portal", "reports", "read"],
+    ["*", "portal", "reports-node-a", "read"],
+    ["*", "portal", "reports-node-b", "read"],
+    ["svc-report-worker", "reports", "catalog", "read"]
+  ],
+  "window_ms": 60000,
+  "lateral_min_edges": 3,
+  "max_offset_ms": 300000,
+  "max_lateness_ms": 120000,
+  "uncertainty_ms": 0
+}

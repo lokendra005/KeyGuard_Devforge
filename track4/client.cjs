@@ -1,0 +1,82 @@
+"use strict";
+const http = require("node:http");
+const https = require("node:https");
+const fs = require("node:fs");
+const C = require("./crypto.cjs");
+const { command } = require("./service.cjs");
+function client(base, identity, actor, ca) {
+  const origin = new URL(base);
+  C.check(
+    ["http:", "https:"].includes(origin.protocol) &&
+      !origin.username &&
+      !origin.password,
+    "INVALID_URL",
+  );
+  C.check(
+    origin.protocol === "https:" ||
+      ["127.0.0.1", "[::1]", "localhost"].includes(origin.hostname),
+    "TLS_REQUIRED",
+  );
+  async function request(route, body) {
+    const data = body === undefined ? undefined : C.canonical(body);
+    return new Promise((resolve, reject) => {
+      const r = (origin.protocol === "https:" ? https : http).request(
+        new URL(route, origin),
+        {
+          method: data ? "POST" : "GET",
+          ca: ca ? fs.readFileSync(ca) : undefined,
+          headers: data
+            ? {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(data),
+              }
+            : {},
+        },
+        (response) => {
+          const chunks = [];
+          let size = 0;
+          response.on("data", (b) => {
+            size += b.length;
+            if (size > 16 * 1024 * 1024)
+              response.destroy(new C.Fault("RESPONSE_CAPACITY"));
+            else chunks.push(b);
+          });
+          response.on("error", reject);
+          response.on("end", () => {
+            try {
+              const result = C.parse(Buffer.concat(chunks));
+              if (response.statusCode !== 200)
+                throw new C.Fault(result.error || "REMOTE_FAILURE");
+              resolve(result);
+            } catch (e) {
+              reject(e);
+            }
+          });
+        },
+      );
+      r.setTimeout(8000, () => r.destroy(new C.Fault("NETWORK_TIMEOUT")));
+      r.on("error", reject);
+      r.end(data);
+    });
+  }
+  return {
+    request,
+    info: (who) => request("/v1/identity?actor=" + encodeURIComponent(who)),
+    prepare: async (body) =>
+      command(
+        identity,
+        await request("/v1/identity?actor=" + encodeURIComponent(actor)),
+        body,
+      ),
+    call: async (body) =>
+      request(
+        "/v1/command",
+        command(
+          identity,
+          await request("/v1/identity?actor=" + encodeURIComponent(actor)),
+          body,
+        ),
+      ),
+  };
+}
+module.exports = { client };

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Key Identity Guard protected resources, identity lifecycle and verifiable access history."
+    />
+    <title>Key Identity Guard · Operations</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to live state</a>
+    <aside>
+      <a class="brand" href="/">KEYGUARD<span>IDENTITY OPERATIONS</span></a>
+      <nav aria-label="Sections">
+        <a href="#content">Resources</a
+        ><a href="#identities">Identity registry</a
+        ><a href="#detection">Access signals</a
+        ><a href="#audit">Audit history</a><a href="#actions">Signed actions</a>
+      </nav>
+      <p class="boundary">
+        Shared authority<br /><span>Every read checks current policy.</span>
+      </p>
+    </aside>
+    <main>
+      <header>
+        <div>
+          <span class="eyebrow">PROTECTED RESOURCE CONTROL</span>
+          <h1>Authority, with evidence.</h1>
+          <p>
+            Inspect current permissions, explain access signals and verify
+            recorded decisions.
+          </p>
+        </div>
+        <span id="connection" class="pill">Disconnected</span>
+      </header>
+      <section class="panel connection">
+        <div>
+          <h2>Connect an observer</h2>
+          <p>
+            Generate a short-lived token with the local signing CLI. Private
+            keys stay outside this browser.
+          </p>
+        </div>
+        <form id="connect">
+          <label for="token">Observer token</label>
+          <div class="inline">
+            <input
+              id="token"
+              type="password"
+              autocomplete="off"
+              required
+            /><button type="submit">Connect</button>
+          </div>
+        </form>
+      </section>
+      <p id="notice" role="status" aria-live="polite"></p>
+      <section id="content">
+        <div class="section-head">
+          <h2>Protected resources</h2>
+          <div class="inline">
+            <button id="refresh" disabled>Refresh state</button
+            ><button id="disconnect" disabled>Disconnect</button>
+          </div>
+        </div>
+        <div class="metrics">
+          <div>
+            <span>Protected files</span><strong id="file-count">—</strong>
+          </div>
+          <div>
+            <span>Active identities</span><strong id="actor-count">—</strong>
+          </div>
+          <div>
+            <span>Recorded events</span><strong id="event-count">—</strong>
+          </div>
+          <div>
+            <span>Access signals</span><strong id="alert-count">—</strong>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Resource</th>
+                <th>Owner</th>
+                <th>Version</th>
+              </tr>
+            </thead>
+            <tbody id="files">
+              <tr>
+                <td colspan="3">Connect to load current state.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="fine">
+          File bodies are never included in this observer view.
+        </p>
+      </section>
+      <section id="identities">
+        <div class="section-head">
+          <h2>Identity registry</h2>
+          <span id="authority" class="pill">No authority loaded</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Identity</th>
+                <th>Role</th>
+                <th>State</th>
+                <th>Epoch</th>
+                <th>Registered keys</th>
+              </tr>
+            </thead>
+            <tbody id="actors"></tbody>
+          </table>
+        </div>
+      </section>
+      <section id="detection">
+        <h2>Access signals</h2>
+        <p>
+          Each signal includes its supporting events and rule. Denied paths
+          indicate attempts, not successful compromise.
+        </p>
+        <div id="signals" class="empty">No observations loaded.</div>
+        <h3>Timing evidence</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Source time</th>
+                <th>Corrected time</th>
+                <th>Uncertainty</th>
+                <th>Classification</th>
+              </tr>
+            </thead>
+            <tbody id="timeline"></tbody>
+          </table>
+        </div>
+      </section>
+      <section id="audit">
+        <div class="section-head">
+          <h2>Verifiable access history</h2>
+          <button id="export" disabled>Export signed history</button>
+        </div>
+        <p id="checkpoint" class="fine">
+          Pin the audit public key independently before verifying an export.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Sequence</th>
+                <th>Identity</th>
+                <th>Action</th>
+                <th>Node</th>
+                <th>Decision / detail</th>
+              </tr>
+            </thead>
+            <tbody id="events"></tbody>
+          </table>
+        </div>
+      </section>
+      <section id="actions">
+        <h2>Submit a signed action</h2>
+        <p>
+          Prepare a command with the CLI, inspect it, then submit it here. A
+          command is single-use and expires; check state after an uncertain
+          outcome.
+        </p>
+        <label for="signed-file">Signed command JSON</label
+        ><input id="signed-file" type="file" accept=".json,application/json" />
+        <pre id="preview">No command loaded.</pre>
+        <button id="submit" disabled>Submit signed command</button>
+      </section>
+      <footer>
+        <span id="updated">No live state loaded</span
+        ><span>ML-DSA · ML-KEM · AES-GCM</span>
+      </footer>
+    </main>
+  </body>
+</html>

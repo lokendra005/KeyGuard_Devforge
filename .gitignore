@@ -1,0 +1,7 @@
+.local/
+.cache/
+dist/
+*.test
+coverage.out
+.env
+.DS_Store

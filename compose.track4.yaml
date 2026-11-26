@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.track4
+    user: "${KIG_UID:-1000}:${KIG_GID:-1000}"
+    read_only: true
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 512m
+    tmpfs: [/tmp:rw,noexec,nosuid,size=64m]
+    environment:
+      KIG_NODE_ID: "${KIG_NODE_ID:-api}"
+    command: [node, track4/cli.cjs, serve, --state, /state, --host, 0.0.0.0, --port, '8444', --cert, /run/tls/cert.pem, --tls-key, /run/tls/key.pem, --origin, "${KIG_PUBLIC_ORIGIN:?Set the HTTPS origin including its port}"]
+    ports: ["127.0.0.1:${KIG_PORT:-8444}:8444"]
+    volumes:
+      - "${KIG_TRACK4_STATE:?Set the initialized Track 4 state directory}:/state"
+      - "${KIG_TLS_CERT:?Set the TLS certificate file}:/run/tls/cert.pem:ro"
+      - "${KIG_TLS_KEY:?Set the TLS private key file}:/run/tls/key.pem:ro"
+    restart: unless-stopped

@@ -1,0 +1,12 @@
+name: Track 4 core
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  offline-runtime:
+    runs-on: ubuntu-latest
+    container: node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --test track4/test/core.test.cjs track4/test/messaging.test.cjs track4/test/detect.test.cjs track4/test/http.test.cjs
+      - run: node track4/test/vectors.cjs

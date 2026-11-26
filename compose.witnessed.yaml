@@ -1,0 +1,8 @@
+# Use after an independently operated witness has produced retained state.
+services:
+  api:
+    command: [serve, --min-protocol, "${KIG_MIN_PROTOCOL:-2}", --listen, "0.0.0.0:8443", --audit-key, /run/secrets/audit_key, --tls-cert, /run/secrets/tls_cert, --tls-key, /run/secrets/tls_key, --anchor, /run/secrets/witness_state, --witness-trust, /run/secrets/witness_public]
+    secrets: [app_dsn, audit_key, tls_cert, tls_key, witness_state, witness_public]
+secrets:
+  witness_state: {file: ./.local/witness-state.json}
+  witness_public: {file: ./.local/witness-public.json}
