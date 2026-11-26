@@ -1,1 +1,11 @@
-{"asset":"protected-resource","boundary":"identity-check"}
+{
+  "asset": "protected-resource",
+  "boundary": "identity-check",
+  "trusted_plaintext_access": [
+    "Bound replicator credentials can export all resource plaintext; every sync export is audited.",
+    "Admin credentials can acquire all resource plaintext through audited ownership changes; admin sync is forbidden."
+  ],
+  "replica_audit": "Signed local reads are uploaded and acknowledged on sync; partitions delay visibility.",
+  "clock_assumption": "Monotonic node clock progresses through suspension; lease bound L/(1-rho).",
+  "at_rest": "Master key is beside the database; protects database-only disclosure, not whole-directory theft."
+}

@@ -82,7 +82,7 @@ test("forged requests cannot consume audit capacity; revocation and raising budg
   const f = fixture(t, { policy: { max_events: 2 } });
   for (let i = 0; i < 75; i++) {
     const request = f.envelope("owner", { op: "status" });
-    request.signature = C.sign(f.keys.peer.private_key, "KIG/command/v1", {
+    request.signature = C.sign(f.keys.peer.private_key, "KIG/command/v2", {
       junk: i,
     });
     A.throws(() => S.execute(f.store, request));

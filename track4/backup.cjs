@@ -109,6 +109,27 @@ function restoreAuthority(bundle, password, target, anchor) {
   );
   const snapshot = unwrap(bundle, password, "authority");
   C.check(snapshot.version === 1, "INVALID_BACKUP");
+  const legacyTables = TABLES.filter(
+    (t) =>
+      !["replication_versions", "replica_bindings", "replica_events"].includes(
+        t,
+      ),
+  );
+  if (
+    Object.keys(snapshot.tables).sort().join(",") ===
+    legacyTables.sort().join(",")
+  ) {
+    for (const name of [
+      "replication_versions",
+      "replica_bindings",
+      "replica_events",
+    ])
+      snapshot.tables[name] = [];
+    for (const row of snapshot.tables.reads) {
+      row.event_seq ??= null;
+      row.signature ??= null;
+    }
+  }
   C.check(
     Object.keys(snapshot.tables).sort().join(",") ===
       [...TABLES].sort().join(","),
@@ -168,7 +189,9 @@ function restoreAuthority(bundle, password, target, anchor) {
           .all()
           .map((c) => c.name);
         const insert = store.db.prepare(
-          "INSERT INTO " +
+          (table === "replication_versions"
+            ? "INSERT OR REPLACE INTO "
+            : "INSERT INTO ") +
             table +
             " (" +
             columns.join(",") +

@@ -243,10 +243,11 @@ test(
       },
       lease_ms: 2000,
     });
+    const credential = f.registerReplica(node.beginSync());
     const upstream = client(
       "http://127.0.0.1:" + origin.address().port,
-      f.keys.admin,
-      f.actors.admin,
+      credential.identity,
+      credential.actor,
     );
     const stop = await replicate(node, upstream, 100);
     stop();
@@ -272,7 +273,11 @@ test(
       ).body,
       f.body,
     );
-    await upstream.call({ op: "revoke", actor: f.actors.owner });
+    await client(
+      "http://127.0.0.1:" + origin.address().port,
+      f.keys.admin,
+      f.actors.admin,
+    ).call({ op: "revoke", actor: f.actors.owner });
     await new Promise((resolve) => setTimeout(resolve, 2050));
     A.equal((await fetch(url + "/healthz")).status, 503);
     await A.rejects(
@@ -287,3 +292,105 @@ test(
     );
   },
 );
+
+test(
+  "slow uploads have per-IP concurrency and wall-clock deadlines; aborted requests release admission",
+  { timeout: 12000 },
+  async (t) => {
+    const net = require("node:net"),
+      f = fixture(t),
+      api = server({ directory: f.directory });
+    await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+    const port = api.address().port,
+      sockets = [];
+    t.after(() => {
+      for (const s of sockets) s.destroy();
+      api.close();
+      api.closeAllConnections();
+    });
+    async function open(text) {
+      const socket = net.createConnection({ host: "127.0.0.1", port });
+      sockets.push(socket);
+      socket.on("error", () => {});
+      await new Promise((resolve) => socket.once("connect", resolve));
+      socket.write(text);
+      return socket;
+    }
+    const upload = `POST /v1/command HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nContent-Length: 100000\r\n\r\n{`;
+    for (let i = 0; i < 4; i++) await open(upload);
+    const url = "http://127.0.0.1:" + port;
+    const busy = await fetch(url + "/healthz");
+    A.equal(busy.status, 429);
+    A.equal((await busy.json()).error, "BUSY");
+    for (const s of sockets) s.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    A.equal((await fetch(url + "/healthz")).status, 200);
+    const start = performance.now(),
+      body = await open(upload),
+      header = await open("GET /healthz HTTP/1.1\r\nHost:");
+    // Continued trickling must not extend either deadline.
+    const timer = setInterval(() => {
+      body.write(" ");
+      header.write(" ");
+    }, 200);
+    t.after(() => clearInterval(timer));
+    await Promise.all(
+      [body, header].map(
+        (s) =>
+          new Promise((resolve) => {
+            s.resume();
+            s.once("close", resolve);
+          }),
+      ),
+    );
+    clearInterval(timer);
+    A.ok(performance.now() - start < 7500);
+    A.ok(performance.now() - start >= 4500);
+    A.equal((await fetch(url + "/healthz")).status, 200);
+  },
+);
+
+test("HTTP ingestion deduplicates exact retries and exposes a conflicting-duplicate diagnostic", async (t) => {
+  const f = fixture(t),
+    api = server({ directory: f.directory });
+  await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+  t.after(() => {
+    api.close();
+    api.closeAllConnections();
+  });
+  const remote = client(
+      "http://127.0.0.1:" + api.address().port,
+      f.keys.admin,
+      f.actors.admin,
+    ),
+    time = new Date().toISOString();
+  const event = {
+    event_id: "duplicate",
+    actor: "user",
+    source_service: "a",
+    target_service: "b",
+    action: "read",
+    outcome: "permit",
+    event_time_utc: time,
+    received_time_utc: time,
+  };
+  const request = {
+    op: "detector.ingest",
+    events: [event, event],
+    config: { allowed_edges: [] },
+    approvals: { changes: [] },
+  };
+  A.equal((await remote.call(request)).counts.events, 1);
+  A.equal((await remote.call(request)).counts.events, 1);
+  await A.rejects(
+    () =>
+      remote.call({
+        ...request,
+        events: [{ ...event, target_service: "changed" }],
+      }),
+    (e) =>
+      e.code === "DUPLICATE_EVENT" &&
+      e.label === "conflicting_duplicate" &&
+      e.event_id === "duplicate",
+  );
+});

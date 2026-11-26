@@ -20,11 +20,11 @@ function options(f, name, extra = {}) {
     ...extra,
   };
 }
-function read(f) {
+function read(f, node = "node-a") {
   f.replicaDetails ||= S.info(f.store, f.actors.owner);
   return S.command(
     f.keys.owner,
-    f.replicaDetails,
+    { ...f.replicaDetails, audience: node },
     {
       op: "read",
       actor: f.actors.owner,
@@ -41,11 +41,11 @@ test("independent replica cache verifies signature, node binding, fresh challeng
   const node = new Replica(options(f, "node-a", { monotonic: () => mono }));
   t.after(() => node.close());
   A.throws(
-    () => node.execute(read(f)),
+    () => node.execute(read(f, node.node)),
     (e) => e.code === "LEASE_EXPIRED",
   );
   const sync = node.beginSync(),
-    grant = f.call("admin", sync);
+    grant = f.sync(sync);
   const altered = structuredClone(grant);
   altered.body.files[0].body = "forged";
   A.throws(
@@ -53,7 +53,7 @@ test("independent replica cache verifies signature, node binding, fresh challeng
     (e) => e.code === "INVALID_GRANT",
   );
   node.install(grant);
-  const readRequest = read(f);
+  const readRequest = read(f, node.node);
   A.equal(node.execute(readRequest).body, f.body);
   A.equal(
     JSON.parse(
@@ -78,11 +78,11 @@ test("independent replica cache verifies signature, node binding, fresh challeng
     () => changedNode.install(grant),
     (e) => e.code === "WRONG_REPLICA",
   );
-  const next = f.call("admin", node.beginSync());
+  const next = f.sync(node.beginSync());
   next.body.evidence.prefix.hash = "0".repeat(96);
   next.signature = C.sign(
     f.store.audit.private_key,
-    "KIG/replica-grant/v1",
+    "KIG/replica-grant/v2",
     next.body,
   );
   A.throws(
@@ -96,15 +96,15 @@ test("delayed grants cannot extend leases; partitions, monotonic rollback and re
   let mono = 0;
   const config = options(f, "partitioned", { monotonic: () => mono });
   let node = new Replica(config);
-  const grant = f.call("admin", node.beginSync());
+  const grant = f.sync(node.beginSync());
   mono = 1000;
   A.throws(
     () => node.install(grant),
     (e) => e.code === "LEASE_EXPIRED",
   );
-  const fresh = f.call("admin", node.beginSync());
+  const fresh = f.sync(node.beginSync());
   node.install(fresh);
-  const envelope = read(f);
+  const envelope = read(f, node.node);
   A.equal(node.execute(envelope).body, f.body);
   A.throws(
     () => node.execute(envelope),
@@ -112,10 +112,10 @@ test("delayed grants cannot extend leases; partitions, monotonic rollback and re
   );
   f.trusted({ op: "revoke", actor: f.actors.owner });
   mono = 1999;
-  A.equal(node.execute(read(f)).body, f.body);
+  A.equal(node.execute(read(f, node.node)).body, f.body);
   mono = 2000;
   A.throws(
-    () => node.execute(read(f)),
+    () => node.execute(read(f, node.node)),
     (e) => e.code === "LEASE_EXPIRED",
   );
   node.close();
@@ -124,12 +124,12 @@ test("delayed grants cannot extend leases; partitions, monotonic rollback and re
   node = new Replica(config);
   t.after(() => node.close());
   A.throws(
-    () => node.execute(read(f)),
+    () => node.execute(read(f, node.node)),
     (e) => e.code === "LEASE_EXPIRED",
   );
-  node.install(f.call("admin", node.beginSync()));
+  node.install(f.sync(node.beginSync()));
   A.throws(
-    () => node.execute(read(f)),
+    () => node.execute(read(f, node.node)),
     (e) => e.code === "UNAUTHORIZED",
   );
   mono--;
@@ -141,9 +141,15 @@ test("delayed grants cannot extend leases; partitions, monotonic rollback and re
 
 test("replica-role credentials cannot perform administrative mutations", (t) => {
   const f = fixture(t);
-  f.trusted({ op: "role.set", actor: f.actors.peer, role: "replicator" });
   const node = new Replica(options(f, "limited"));
   t.after(() => node.close());
+  f.trusted({
+    op: "role.set",
+    actor: f.actors.peer,
+    role: "replicator",
+    node_id: node.node,
+    node_public_key: node.audit.public_key,
+  });
   node.install(f.call("peer", node.beginSync()));
   A.throws(
     () => f.call("peer", { op: "revoke", actor: f.actors.owner }),
@@ -152,7 +158,12 @@ test("replica-role credentials cannot perform administrative mutations", (t) => 
   A.throws(
     () =>
       node.execute(
-        f.envelope("admin", { op: "revoke", actor: f.actors.owner }),
+        S.command(
+          f.keys.admin,
+          { ...S.info(f.store, f.actors.admin), audience: node.node },
+          { op: "revoke", actor: f.actors.owner },
+          f.now(),
+        ),
       ),
     (e) => e.code === "REPLICA_READ_ONLY",
   );
@@ -194,8 +205,11 @@ async function fiveNodeMeasurement(f, t) {
   });
   for (const w of workers) {
     const request = (await w.call("begin")).result;
-    A.ok((await w.call("install", f.call("admin", request))).result);
-    A.equal((await w.call("execute", read(f))).result.body, f.body);
+    A.ok((await w.call("install", f.sync(request))).result);
+    A.equal(
+      (await w.call("execute", read(f, w.config.node))).result.body,
+      f.body,
+    );
   }
   f.trusted({ op: "revoke", actor: f.actors.owner });
   const acknowledged = performance.now(),
@@ -210,7 +224,7 @@ async function fiveNodeMeasurement(f, t) {
               const request = (await workers[i].call("begin")).result;
               const response = await workers[i].call(
                 "install",
-                f.call("admin", request),
+                f.sync(request),
               );
               A.ok(response.result);
               resolve();
@@ -226,7 +240,10 @@ async function fiveNodeMeasurement(f, t) {
   while (observed.size < 5) {
     for (let i = 0; i < workers.length; i++) {
       if (observed.has(i)) continue;
-      const response = await workers[i].call("execute", read(f));
+      const response = await workers[i].call(
+        "execute",
+        read(f, workers[i].config.node),
+      );
       const elapsed = performance.now() - acknowledged;
       if (response.error) {
         A.ok(
@@ -261,7 +278,6 @@ async function fiveNodeMeasurement(f, t) {
     injected_sync_delays_ms: [50, 150, 300],
     partitions: 2,
     p50_ms: sorted[2],
-    p99_ms: sorted[4],
     max_ms: sorted[4],
     observations: latencies,
     measurement:

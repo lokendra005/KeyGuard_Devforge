@@ -19,6 +19,7 @@ node --test track4/test/*.test.cjs
 node track4/test/vectors.cjs
 printf '\nHELD-OUT DETECTOR (reference and evaluation windows are disjoint)\n'
 node track4/test/detector-benchmark.cjs
+node track4/test/detector-topology-benchmark.cjs
 printf '\nCRYPTO + TRANSACTION PERFORMANCE\n'
 node track4/test/bench.cjs
 printf '\n12-GOAL EVIDENCE MAP\n'

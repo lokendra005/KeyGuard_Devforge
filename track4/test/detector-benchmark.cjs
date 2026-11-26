@@ -18,8 +18,8 @@ function generate(seed = 20261127, episodes = 600) {
     labels = [],
     changes = [];
   const config = {
-    window_ms: 300000,
-    half_life_ms: 120000,
+    window_ms: 1800000,
+    half_life_ms: 600000,
     lateral_min_edges: 3,
     lateral_score_milli: 2000,
   };
@@ -152,8 +152,8 @@ function benchmark(seed = 20261127, episodes = 600) {
     },
     protocol:
       "Fixed rules and parameters; separate earlier reference window; services, identities, roles and action names renamed by seed. Labels are passed only to score(). Synthetic, not real-world accuracy.",
-    known_miss:
-      "Isolated stolen-credential access is deliberately indistinguishable from benign novelty under these observations; suppressing novelty-only alarms trades recall for fewer false positives.",
+    tradeoff:
+      "Actor-wide fan-out and two-hop sensitivity connect benign novelty and isolated denials in this original, unchanged holdout. Reported false positives are retained; recall is not evidence of identifying stolen credentials in isolation.",
   };
 }
 if (require.main === module)

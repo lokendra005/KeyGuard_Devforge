@@ -29,11 +29,20 @@ with tempfile.TemporaryDirectory(prefix='keyguard-deployment-') as temporary:
     save(config/'trust.json', {'authority':status['authority'], 'public_key':status['checkpoint']['public_key']})
     run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=api','-addext','subjectAltName=DNS:api,DNS:node-a,DNS:node-b,DNS:node-c','-keyout',str(config/'key.pem'),'-out',str(config/'cert.pem')])
     (config/'key.pem').chmod(0o600)
-    shutil.copy2(keys/'node.json',config/'node-key.json')
     for identity in ['operator','owner']:
         shutil.copy2(keys/(identity+'.json'),clients/(identity+'.json'))
     shutil.copy2(config/'cert.pem',clients/'ca.pem')
-    save(config/'replica.json', {'upstream':'https://api:8444','actor':'node','key_file':'/config/node-key.json','trust_file':'/config/trust.json','ca_file':'/config/cert.pem','lease_ms':5000,'sync_ms':100})
+    for node in ['node-a','node-b','node-c']:
+        state=base/node; state.mkdir(mode=0o700)
+        binding=config/(node+'-binding.json'); key=config/(node+'-key.json')
+        run(['node',str(ROOT/'track4/cli.cjs'),'replica-init','--state',str(state),'--node',node,'--trust',str(config/'trust.json'),'--out',str(binding)])
+        run(['node',str(ROOT/'track4/cli.cjs'),'keygen','--out',str(key)])
+        # Trusted local enrollment still checks possession and binds this unique node key.
+        enrollment=base/(node+'-enroll.cjs')
+        enrollment.write_text("const fs=require('node:fs'),C=require("+json.dumps(str(ROOT/'track4/crypto.cjs'))+");const key=JSON.parse(fs.readFileSync(process.argv[2])),binding=JSON.parse(fs.readFileSync(process.argv[3])),authority=process.argv[4],actor=process.argv[5];console.log(JSON.stringify({op:'enroll',actor,role:'replicator',public_key:key.public_key,...binding,proof:C.sign(key.private_key,'KIG/enroll/v1',{authority,actor,role:'replicator',...binding})}));")
+        body=base/(node+'-enroll.json'); body.write_text(run(['node',str(enrollment),str(key),str(binding),status['authority'],node]).stdout)
+        run(['node',str(ROOT/'track4/cli.cjs'),'local','--state',str(authority),'--body',str(body)])
+        save(config/(node+'.json'),{'upstream':'https://api:8444','actor':node,'key_file':'/config/'+key.name,'trust_file':'/config/trust.json','ca_file':'/config/cert.pem','lease_ms':5000,'sync_ms':100})
     script = clients/'check.cjs'
     script.write_text('''"use strict";
 const fs=require("node:fs"), A=require("node:assert/strict"), {client}=require("/app/track4/client.cjs");
@@ -71,7 +80,7 @@ const peers=["api","node-a","node-b","node-c"];
             state.mkdir(mode=0o700,exist_ok=True)
             container=name+'-'+host; containers.append(container)
             args=['docker','run','-d','--pull','never','--name',container,'--network',name,'--network-alias',host,'--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--memory','512m','--pids-limit','64','--user',f'{os.getuid()}:{os.getgid()}','--tmpfs','/tmp:rw,noexec,nosuid,size=64m','-v',f'{state}:/state','-v',f'{config}:/config:ro',image,'node','track4/cli.cjs','serve','--state','/state','--host','0.0.0.0','--port','8444','--cert','/config/cert.pem','--tls-key','/config/key.pem','--origin',f'https://{host}:8444']
-            if host!='api': args+=['--replica','/config/replica.json','--node',host]
+            if host!='api': args+=['--replica','/config/'+host+'.json','--node',host]
             run(args)
         checked=run(['docker','run','--rm','--pull','never','--network',name,'--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--memory','512m','--user',f'{os.getuid()}:{os.getgid()}','-v',f'{clients}:/clients:ro',image,'node','/clients/check.cjs'])
         print(checked.stdout,end='')

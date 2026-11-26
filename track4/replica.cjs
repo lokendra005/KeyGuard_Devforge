@@ -67,12 +67,16 @@ class Replica {
     this.audit = load("audit") || C.generate();
     this.authTime = load("time") || 0;
     this.persist("audit", this.audit);
+    this.ack = load("ack");
+    const snapshot = load("snapshot");
     const grant = load("grant");
     if (grant) {
       C.check(
         C.verify(
           this.trust.public_key,
-          "KIG/replica-grant/v1",
+          grant.body.version === 1
+            ? "KIG/replica-grant/v1"
+            : "KIG/replica-grant/v2",
           grant.body,
           grant.signature,
         ),
@@ -84,8 +88,21 @@ class Replica {
           grant.body.node_public_key === this.audit.public_key,
         "WRONG_REPLICA",
       );
-      this.grant = grant;
-      this.anchor = grant.body.checkpoint;
+      if (grant.body.version === 2) {
+        C.check(
+          snapshot &&
+            C.digest(snapshot.checkpoint) === C.digest(grant.body.checkpoint),
+          "INVALID_SNAPSHOT",
+        );
+        this.grant = grant;
+        this.anchor = grant.body.checkpoint;
+        for (const name of ["actors", "keys", "files"])
+          this[name] = new Map(snapshot[name].map((r) => [r.id, r]));
+      } else {
+        // v1 caches need a full audience-bound snapshot; local read evidence and keys are retained.
+        this.db.exec("DELETE FROM policy_events");
+        this.ack = undefined;
+      }
     }
     // Persisted snapshots never restore a lease; every process start needs a fresh signed challenge.
   }
@@ -113,13 +130,35 @@ class Replica {
   }
   beginSync() {
     C.check(!this.closed, "CLOSED");
-    this.pending = { nonce: C.random(), start: this.mono() };
+    const prefix = this.ack
+      ? structuredClone(this.ack)
+      : {
+          authority: this.trust.authority,
+          public_key: this.audit.public_key,
+          seq: 0,
+          hash: "",
+          time_ms: 0,
+        };
+    const events = this.db
+      .prepare("SELECT body FROM events WHERE seq>? ORDER BY seq LIMIT 256")
+      .all(prefix.seq)
+      .map((r) => JSON.parse(r.body));
+    const log = {
+      version: 1,
+      authority: this.trust.authority,
+      public_key: this.audit.public_key,
+      prefix,
+      events,
+    };
+    const uploaded = verifyEvidence(log, this.audit.public_key, prefix);
+    this.pending = { nonce: C.random(), start: this.mono(), uploaded };
     return {
       op: "replica.sync",
       node_id: this.node,
       nonce: this.pending.nonce,
       node_public_key: this.audit.public_key,
       lease_ms: this.leaseMS,
+      read_log: log,
       ...(this.anchor ? { prefix: structuredClone(this.anchor) } : {}),
     };
   }
@@ -134,15 +173,18 @@ class Replica {
         body.node_id === this.node &&
         body.authority === this.trust.authority &&
         body.node_public_key === this.audit.public_key &&
-        body.version === 1 &&
-        body.lease_ms === this.leaseMS,
+        body.version === 2 &&
+        Number.isSafeInteger(body.lease_ms) &&
+        body.lease_ms >= 100 &&
+        body.lease_ms <= this.leaseMS &&
+        body.lease_ms <= (body.policy?.max_lease_ms || 5000),
       "WRONG_REPLICA",
     );
-    C.check(now < this.pending.start + this.leaseMS, "LEASE_EXPIRED");
+    C.check(now < this.pending.start + body.lease_ms, "LEASE_EXPIRED");
     C.check(
       C.verify(
         this.trust.public_key,
-        "KIG/replica-grant/v1",
+        "KIG/replica-grant/v2",
         body,
         grant.signature,
       ),
@@ -158,6 +200,28 @@ class Replica {
       "INVALID_CHECKPOINT",
     );
     C.integer(body.issued_ms, 0, Number.MAX_SAFE_INTEGER);
+    C.check(
+      C.digest(body.read_log_ack) === C.digest(this.pending.uploaded),
+      "INVALID_LOG_ACK",
+    );
+    C.check(
+      this.anchor
+        ? body.mode === "delta" && C.digest(body.base) === C.digest(this.anchor)
+        : body.mode === "full" && body.base === null,
+      "INVALID_DELTA_BASE",
+    );
+    const next = {};
+    for (const name of ["actors", "keys", "files"]) {
+      C.check(Array.isArray(body[name]), "INVALID_SNAPSHOT");
+      next[name] = new Map(body.mode === "full" ? [] : this[name]);
+      const ids = new Set();
+      for (const row of body[name]) {
+        C.text(row.id);
+        C.check(!ids.has(row.id), "INVALID_SNAPSHOT");
+        ids.add(row.id);
+        next[name].set(row.id, row);
+      }
+    }
     this.db.exec("BEGIN IMMEDIATE");
     try {
       for (const event of body.evidence.events)
@@ -165,6 +229,13 @@ class Replica {
           .prepare("INSERT INTO policy_events VALUES(?,?)")
           .run(event.seq, JSON.stringify(event));
       this.persist("grant", grant);
+      this.persist("snapshot", {
+        checkpoint: anchor,
+        ...Object.fromEntries(
+          Object.entries(next).map(([k, v]) => [k, [...v.values()]]),
+        ),
+      });
+      this.persist("ack", body.read_log_ack);
       this.db.exec("COMMIT");
     } catch (e) {
       this.db.exec("ROLLBACK");
@@ -173,11 +244,10 @@ class Replica {
     this.grant = grant;
     this.anchor = anchor;
     this.start = this.pending.start;
-    this.deadline = this.start + this.leaseMS;
+    this.deadline = this.start + body.lease_ms;
+    this.ack = body.read_log_ack;
     this.pending = undefined;
-    this.actors = new Map(body.actors.map((a) => [a.id, a]));
-    this.keys = new Map(body.keys.map((k) => [k.id, k]));
-    this.files = new Map(body.files.map((f) => [f.id, f]));
+    Object.assign(this, next);
     C.check(this.mono() < this.deadline, "LEASE_EXPIRED");
     return {
       checkpoint: this.anchor,
@@ -233,6 +303,7 @@ class Replica {
       envelope,
       {
         authority: this.trust.authority,
+        audience: this.node,
         policy: this.policy(),
         actor: this.actors.get(envelope.actor),
         key: this.keys.get(envelope.key_id),
@@ -262,8 +333,9 @@ class Replica {
         C.check(body.actor === auth.actor, "FORBIDDEN");
         const member = this.actors.get(auth.actor);
         result = {
-          version: 1,
+          version: 2,
           authority: this.trust.authority,
+          audience: this.node,
           actor: auth.actor,
           epoch: member.epoch,
           disabled: !!member.disabled,

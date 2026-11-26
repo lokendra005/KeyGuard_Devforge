@@ -35,8 +35,8 @@ test("frozen reference baseline handles renamed actions, self-approval, revocati
       rule,
     );
   const score = D.score(report, data.labels, ["attack"]);
-  A.equal(score.fp, 0);
-  A.ok(score.fn > 0);
+  A.ok(score.fp > 0); // Increased sensitivity must not erase benign fan-out false positives.
+  A.equal(score.fn, 0);
   A.ok(score.tp > 0);
   A.throws(
     () => D.detect(data.reference, { changes: [] }, { baseline }),
@@ -52,8 +52,8 @@ test("frozen reference baseline handles renamed actions, self-approval, revocati
 test("12,000 held-out observations are evaluated without the old 10k cap", () => {
   const result = benchmark(987654321);
   A.equal(result.heldout_events, 12000);
-  A.equal(result.metrics.fp, 0);
-  A.ok(result.metrics.f1 > 0.8 && result.metrics.f1 < 1);
+  A.ok(result.metrics.fp > 0);
+  A.ok(result.metrics.f1 > 0.7 && result.metrics.f1 < 0.9);
   A.ok(result.timing.corrected_out_of_order_events > 0);
 });
 

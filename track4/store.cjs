@@ -33,19 +33,25 @@ const TABLES = [
   "offers",
   "mail",
   "viewers",
+  "replication_versions",
+  "replica_bindings",
+  "replica_events",
 ];
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (id TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS actors (id TEXT PRIMARY KEY, role TEXT NOT NULL, disabled INTEGER NOT NULL, epoch INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS keys (id TEXT PRIMARY KEY, actor TEXT NOT NULL REFERENCES actors(id), public_key TEXT NOT NULL, not_before INTEGER NOT NULL, not_after INTEGER, revoked INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES actors(id), version INTEGER NOT NULL, packet TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT REFERENCES actors(id), version INTEGER NOT NULL, packet TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY, payload TEXT NOT NULL, previous TEXT NOT NULL, hash TEXT NOT NULL, signature TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS reads (id TEXT PRIMARY KEY, actor TEXT NOT NULL, asset TEXT NOT NULL, decision TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS reads (id TEXT PRIMARY KEY, actor TEXT NOT NULL, asset TEXT NOT NULL, decision TEXT NOT NULL, event_seq INTEGER, signature TEXT);
 CREATE TABLE IF NOT EXISTS nonces (id TEXT PRIMARY KEY, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS recoveries (id TEXT PRIMARY KEY, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS offers (id TEXT PRIMARY KEY, actor TEXT NOT NULL, body TEXT NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS mail (id TEXT PRIMARY KEY, sender TEXT NOT NULL, recipient TEXT NOT NULL, offer_id TEXT NOT NULL, body TEXT NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS viewers (id TEXT PRIMARY KEY, actor TEXT NOT NULL, key_id TEXT NOT NULL, epoch INTEGER NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS replication_versions (kind TEXT NOT NULL, id TEXT NOT NULL, seq INTEGER NOT NULL, PRIMARY KEY(kind,id));
+CREATE TABLE IF NOT EXISTS replica_bindings (actor TEXT PRIMARY KEY REFERENCES actors(id), node_id TEXT NOT NULL UNIQUE, node_public_key TEXT NOT NULL UNIQUE, cursor TEXT);
+CREATE TABLE IF NOT EXISTS replica_events (node_id TEXT NOT NULL, seq INTEGER NOT NULL, body TEXT NOT NULL, received_ms INTEGER NOT NULL, PRIMARY KEY(node_id,seq));
 `;
 function directory(given) {
   const base = given || process.env.TRACK4_STATE_DIR || os.tmpdir();
@@ -81,9 +87,25 @@ class Store {
     this.dir = directory(options.directory);
     const monotonic = options.monotonic || (() => performance.now());
     this.wallClock = options.wallClock || Date.now;
-    const wall = this.wallClock(),
-      mono = monotonic();
-    this.clock = options.clock || (() => Math.floor(wall + monotonic() - mono));
+    this.clock = options.clock;
+    this.clockTolerance = 0;
+    if (!this.clock) {
+      // Bracket wall time to exclude lazy timer startup/preemption from the clock anchor.
+      let best;
+      for (let i = 0; i < 3; i++) {
+        const before = monotonic(),
+          wall = this.wallClock(),
+          after = monotonic();
+        C.check(
+          Number.isFinite(before) && Number.isFinite(after) && after >= before,
+          "CLOCK_SAMPLE_INVALID",
+        );
+        const sample = { wall, mono: after, width: after - before };
+        if (!best || sample.width < best.width) best = sample;
+      }
+      this.clock = () => Math.floor(best.wall + monotonic() - best.mono);
+      this.clockTolerance = Math.ceil(best.width) + 1;
+    }
     this.node = options.node || process.env.KIG_NODE_ID || os.hostname();
     C.text(this.node, 256);
     const dbfile = path.join(this.dir, "authority.sqlite");
@@ -151,13 +173,16 @@ class Store {
       "PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA secure_delete=ON;",
     );
     this.db.exec(SCHEMA);
+    if (this.get("authority"))
+      C.check([1, 2].includes(this.get("schema")), "UNSUPPORTED_STORAGE");
+    this.upgradeTables();
     C.check(
       this.get("authority") ||
         this.db.prepare("SELECT count(*) AS n FROM meta").get().n === 0,
       "UNSUPPORTED_STORAGE",
     );
     if (this.get("authority")) {
-      C.check(this.get("schema") === 1, "UNSUPPORTED_STORAGE");
+      C.check([1, 2].includes(this.get("schema")), "UNSUPPORTED_STORAGE");
       C.check(
         this.get("master_commitment") === C.hash(this.master),
         "WRONG_MASTER_KEY",
@@ -182,6 +207,20 @@ class Store {
         ),
         "INVALID_AUDIT_KEY",
       );
+      this.upgradeReads();
+      if (this.get("schema") === 1)
+        this.transaction((now) => {
+          // Reject old binaries on subsequent opens without replacing keys or rewriting history.
+          if (this.get("schema") === 1) {
+            this.set("schema", 2);
+            this.record(now, "protocol.upgrade", "local-operator", {
+              from_schema: 1,
+              to_schema: 2,
+              command_version: 2,
+            });
+          }
+        });
+      this.checkpoint();
       if (options.anchor)
         verifyEvidence(
           this.evidence(),
@@ -189,6 +228,135 @@ class Store {
           options.anchor,
         );
     }
+  }
+  upgradeTables() {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      if (
+        this.db
+          .prepare("PRAGMA table_info(files)")
+          .all()
+          .find((c) => c.name === "owner").notnull
+      ) {
+        this.db.exec(
+          "ALTER TABLE files RENAME TO files_v1; CREATE TABLE files (id TEXT PRIMARY KEY, owner TEXT REFERENCES actors(id), version INTEGER NOT NULL, packet TEXT NOT NULL); INSERT INTO files SELECT * FROM files_v1; DROP TABLE files_v1;",
+        );
+      }
+      if (
+        !this.db
+          .prepare("PRAGMA table_info(reads)")
+          .all()
+          .some((c) => c.name === "event_seq")
+      )
+        this.db.exec("ALTER TABLE reads ADD COLUMN event_seq INTEGER");
+      if (
+        !this.db
+          .prepare("PRAGMA table_info(reads)")
+          .all()
+          .some((c) => c.name === "signature")
+      )
+        this.db.exec("ALTER TABLE reads ADD COLUMN signature TEXT");
+      for (const table of ["actors", "keys", "files"]) {
+        // Change versions share the next audit sequence and commit atomically with the mutation.
+        const kind = "'" + JSON.stringify(table) + "'";
+        this.db.exec(
+          `INSERT OR IGNORE INTO replication_versions SELECT ${kind},id,(SELECT coalesce(max(seq),0)+1 FROM events) FROM ${table};`,
+        );
+        for (const event of ["INSERT", "UPDATE"])
+          this.db.exec(
+            `CREATE TRIGGER IF NOT EXISTS changed_${table}_${event} AFTER ${event} ON ${table} BEGIN INSERT INTO replication_versions VALUES(${kind},NEW.id,(SELECT coalesce(max(seq),0)+1 FROM events)) ON CONFLICT(kind,id) DO UPDATE SET seq=excluded.seq; END;`,
+          );
+      }
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+  }
+  upgradeReads() {
+    const pending = this.db
+      .prepare(
+        "SELECT * FROM reads WHERE event_seq IS NULL OR signature IS NULL",
+      )
+      .all();
+    if (!pending.length) return;
+    // Old decisions are bound only after verifying their original signed history.
+    verifyEvidence(this.evidence(), this.audit.public_key);
+    const first = new Map();
+    for (const row of this.evidence().events)
+      if (
+        row.payload.action === "read" &&
+        !first.has(row.payload.detail.request_id)
+      )
+        first.set(row.payload.detail.request_id, row);
+    this.transaction(() => {
+      for (const read of pending) {
+        const event = first.get(read.id);
+        C.check(
+          event &&
+            event.payload.actor === read.actor &&
+            event.payload.detail.asset === read.asset &&
+            event.payload.detail.decision === read.decision,
+          "READ_AUDIT_MISMATCH",
+        );
+        this.db
+          .prepare("UPDATE reads SET event_seq=?,signature=? WHERE id=?")
+          .run(
+            event.seq,
+            this.signRead({ ...read, event_seq: event.seq }),
+            read.id,
+          );
+      }
+    });
+  }
+  signRead(row) {
+    const { id, actor, asset, decision, event_seq } = row;
+    return C.sign(this.audit.private_key, "KIG/read-index/v1", {
+      authority: this.get("authority"),
+      id,
+      actor,
+      asset,
+      decision,
+      event_seq,
+    });
+  }
+  verifyRead(row) {
+    const { id, actor, asset, decision, event_seq, signature } = row;
+    C.check(
+      C.verify(
+        this.audit.public_key,
+        "KIG/read-index/v1",
+        {
+          authority: this.get("authority"),
+          id,
+          actor,
+          asset,
+          decision,
+          event_seq,
+        },
+        signature,
+      ),
+      "READ_AUDIT_MISMATCH",
+    );
+    return this.verifyEvent(event_seq);
+  }
+  verifyEvent(seq) {
+    const row = this.db.prepare("SELECT * FROM events WHERE seq=?").get(seq);
+    C.check(row, "BROKEN_LOG");
+    const payload = C.parse(row.payload);
+    C.check(
+      payload.authority === this.get("authority") &&
+        payload.seq === seq &&
+        row.hash === C.digest(["KIG/audit-chain/v1", row.previous, payload]) &&
+        C.verify(
+          this.audit.public_key,
+          "KIG/audit-event/v1",
+          { seq, hash: row.hash },
+          row.signature,
+        ),
+      "BROKEN_LOG",
+    );
+    return payload;
   }
   get(id) {
     const row = this.db.prepare("SELECT value FROM meta WHERE id=?").get(id);
@@ -216,8 +384,11 @@ class Store {
           this.loadedAuthority === this.get("authority"),
           "AUTHORITY_CHANGED",
         );
-      const now = C.integer(this.clock(), 0, Number.MAX_SAFE_INTEGER);
-      C.check(now >= (this.get("last_time") || 0), "CLOCK_REGRESSION");
+      const raw = C.integer(this.clock(), 0, Number.MAX_SAFE_INTEGER);
+      const last = this.get("last_time") || 0;
+      C.check(raw + this.clockTolerance >= last, "CLOCK_REGRESSION");
+      // Merge concurrent clock quantization forward; never extend a key or request deadline.
+      const now = Math.max(raw, last);
       const result = fn(now);
       this.set("last_time", now);
       this.db.exec("COMMIT");
@@ -246,6 +417,7 @@ class Store {
           "role.set",
           "backup",
           "policy.budget",
+          "protocol.upgrade",
         ].includes(action),
       "AUDIT_CAPACITY",
     );
@@ -287,7 +459,24 @@ class Store {
     });
   }
   checkpoint() {
-    const cached = this.verifiedCheckpoint;
+    let cached = this.verifiedCheckpoint;
+    if (!cached) {
+      const saved = this.get("verified_checkpoint");
+      if (saved) {
+        C.check(
+          C.verify(
+            this.audit.public_key,
+            "KIG/verified-checkpoint/v1",
+            saved.body,
+            saved.signature,
+          ) &&
+            saved.body.authority === this.get("authority") &&
+            saved.body.public_key === this.audit.public_key,
+          "INVALID_CHECKPOINT",
+        );
+        cached = saved.body;
+      }
+    }
     if (cached) {
       const row = this.db
         .prepare("SELECT hash FROM events WHERE seq=?")
@@ -300,6 +489,15 @@ class Store {
       this.audit.public_key,
       cached,
     );
+    if (!cached || C.digest(cached) !== C.digest(this.verifiedCheckpoint))
+      this.set("verified_checkpoint", {
+        body: this.verifiedCheckpoint,
+        signature: C.sign(
+          this.audit.private_key,
+          "KIG/verified-checkpoint/v1",
+          this.verifiedCheckpoint,
+        ),
+      });
     return this.verifiedCheckpoint;
   }
   file(row) {

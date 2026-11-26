@@ -102,6 +102,45 @@ function estimateClock(t0, t1, t2, t3, precision = 1) {
     round_trip_ms: delay,
   };
 }
+const DEFAULT_OUTCOMES = Object.freeze(
+  Object.fromEntries([
+    ...[
+      "allow",
+      "allowed",
+      "success",
+      "succeeded",
+      "granted",
+      "permit",
+      "ok",
+    ].map((x) => [x, "success"]),
+    ...[
+      "deny",
+      "denied",
+      "failure",
+      "failed",
+      "blocked",
+      "rejected",
+      "error",
+    ].map((x) => [x, "failure"]),
+  ]),
+);
+function unique(events) {
+  const seen = new Map();
+  return events.filter((event) => {
+    C.object(event);
+    C.text(event.event_id);
+    const content = C.digest(event),
+      previous = seen.get(event.event_id);
+    if (previous !== undefined && previous !== content) {
+      const error = new C.Fault("DUPLICATE_EVENT");
+      error.label = "conflicting_duplicate";
+      error.event_id = event.event_id;
+      throw error;
+    }
+    seen.set(event.event_id, content);
+    return previous === undefined;
+  });
+}
 function normalize(event, index, config) {
   C.object(event);
   const e = { ...event };
@@ -127,6 +166,14 @@ function normalize(event, index, config) {
     e[field] ??= "";
     C.text(e[field]);
   }
+  const mapping = {
+    ...DEFAULT_OUTCOMES,
+    ...C.object(config.outcome_map || {}),
+  };
+  for (const value of Object.values(mapping))
+    C.check(["success", "failure"].includes(value), "INVALID_OUTCOME_MAP");
+  const word = e.outcome.trim().toLowerCase();
+  e.outcome = Object.hasOwn(mapping, word) ? mapping[word] : "unknown";
   const offset = number(e.source_clock_offset_ms ?? 0);
   const uncertainty = C.integer(
     number(e.source_clock_uncertainty_ms ?? config.uncertainty_ms ?? 0),
@@ -166,16 +213,14 @@ function learn(reference, options = {}) {
     roles = new Map();
   let start = Infinity,
     end = -Infinity;
-  const ids = new Set();
+  reference = unique(reference);
   for (let i = 0; i < reference.length; i++) {
     const r = normalize(reference[i], i, options),
       e = r.event;
-    C.check(!ids.has(e.event_id), "DUPLICATE_EVENT");
-    ids.add(e.event_id);
     start = Math.min(start, r.corrected_ms);
     end = Math.max(end, r.corrected_ms);
     if (
-      !["allow", "success"].includes(e.outcome) ||
+      e.outcome !== "success" ||
       e.role_before !== e.role_after ||
       r.uncertain
     )
@@ -212,8 +257,8 @@ function detect(events, approvals, config = {}) {
     "EVENT_BYTES_CAPACITY",
   );
   C.object(config);
-  const window = C.integer(config.window_ms ?? 300000, 1, 3600000);
-  const halfLife = C.integer(config.half_life_ms ?? 120000, 1, 3600000);
+  const window = C.integer(config.window_ms ?? 1800000, 1, 3600000);
+  const halfLife = C.integer(config.half_life_ms ?? 600000, 1, 3600000);
   const minEdges = C.integer(config.lateral_min_edges ?? 3, 2, 100);
   const minScore = C.integer(config.lateral_score_milli ?? 2000, 1, 100000);
   const maxOffset = C.integer(config.max_offset_ms ?? 300000, 0, 86400000);
@@ -274,11 +319,8 @@ function detect(events, approvals, config = {}) {
     }
     return lo ? times[lo - 1] : Infinity;
   }
-  const ids = new Set();
-  const observations = events.map((event, index) => {
+  const observations = unique(events).map((event, index) => {
     const row = normalize(event, index, config);
-    C.check(!ids.has(event.event_id), "DUPLICATE_EVENT");
-    ids.add(event.event_id);
     if (baseline)
       C.check(
         row.corrected_ms > baseline.reference_end_ms,
@@ -313,6 +355,9 @@ function detect(events, approvals, config = {}) {
         ),
       ],
       events: support,
+      sessions: [
+        ...new Set(rows.map((r) => r.event.session_id).filter(Boolean)),
+      ],
       detected_at_ms: Math.max(...rows.map((r) => r.received_ms)),
       explanation,
       uncertain_order:
@@ -321,8 +366,14 @@ function detect(events, approvals, config = {}) {
       ...(scoreMilli === undefined ? {} : { decayed_score_milli: scoreMilli }),
     };
     alerts.push(result);
-    for (const row of rows)
+    for (const row of rows) {
       if (!row.alerts.includes(result.id)) row.alerts.push(result.id);
+      row.first_alert_at_ms = Math.min(
+        row.first_alert_at_ms ?? Infinity,
+        result.detected_at_ms,
+      );
+    }
+    return result;
   }
   function scoped(a, row, roleOnly = false) {
     const e = row.event;
@@ -343,8 +394,8 @@ function detect(events, approvals, config = {}) {
   }
   for (const row of observations) {
     const e = row.event,
-      session = C.canonical([e.actor, e.session_id]);
-    const successful = ["success", "allow"].includes(e.outcome);
+      session = e.actor;
+    const successful = e.outcome === "success";
     if (row.uncertain) row.labels.push("timing_uncertain");
     if (row.out_of_order) row.labels.push("delayed_delivery");
     if (row.offset_ms) row.labels.push("clock_corrected");
@@ -399,7 +450,7 @@ function detect(events, approvals, config = {}) {
       }
       continue;
     }
-    if (!["allow", "deny", "success", "failure"].includes(e.outcome)) continue;
+    if (!["success", "failure"].includes(e.outcome)) continue;
     const previous = suspiciousChanges.get(session);
     if (
       successful &&
@@ -410,7 +461,7 @@ function detect(events, approvals, config = {}) {
       alert(
         "access_after_role_change",
         [previous, row],
-        "Allowed access follows an unexplained role transition in the same identity/session.",
+        "Allowed access follows an unexplained role transition in the same identity.",
       );
     }
     if (successful && revoked.has(e.actor)) {
@@ -423,7 +474,7 @@ function detect(events, approvals, config = {}) {
           revoked.get(e.actor).event.event_id,
       );
     }
-    if (e.outcome === "allow" && a && !scoped(a, row)) {
+    if (successful && a && !scoped(a, row)) {
       row.labels.push("approval_scope_violation");
       alert(
         "approval_scope_violation",
@@ -437,7 +488,7 @@ function detect(events, approvals, config = {}) {
     const regranted =
       (grant && grant.at > revokedAt && row.latest_ms < grant.until) ||
       (scoped(a, row) && time(a.valid_from_utc) > revokedAt);
-    if (e.outcome === "allow" && row.earliest_ms >= revokedAt && !regranted) {
+    if (successful && row.earliest_ms >= revokedAt && !regranted) {
       row.labels.push("access_after_role_revocation");
       alert(
         "access_after_role_revocation",
@@ -467,45 +518,72 @@ function detect(events, approvals, config = {}) {
         [row],
         "Explicit strict-baseline policy: this successful service edge is absent from the frozen baseline.",
       );
-    const tails = groups.get(session) || new Map();
-    groups.set(session, tails);
-    const previousPath = tails.get(e.source_service) || [];
-    let chain = previousPath.filter(
-      (r) => row.corrected_ms - r.corrected_ms <= window,
-    );
-    const edge = C.canonical([e.source_service, e.target_service]);
-    if (
-      chain.some(
-        (r) =>
-          C.canonical([r.event.source_service, r.event.target_service]) ===
-          edge,
-      )
-    )
-      chain = [];
-    chain = [...chain, row].slice(-128);
-    tails.set(e.target_service, chain);
-    const scoreMilli = Math.floor(
-      1000 *
-        chain.reduce(
-          (sum, r) =>
-            sum + 2 ** (-(row.corrected_ms - r.corrected_ms) / halfLife),
-          0,
-        ),
-    );
-    if (chain.length >= minEdges && scoreMilli >= minScore) {
-      const fresh = chain.filter(
-        (r) => !r.labels.includes("lateral_movement_candidate"),
-      );
-      if (fresh.length) {
-        for (const r of chain)
-          if (!r.labels.includes("lateral_movement_candidate"))
-            r.labels.push("lateral_movement_candidate");
-        alert(
+    if (e.source_service === e.target_service) continue;
+    let graphs = groups.get(session);
+    if (!graphs) {
+      const { Graph } = require("./lateral.cjs");
+      graphs = {
+        all: new Graph(window, halfLife),
+        success: new Graph(window, halfLife),
+      };
+      groups.set(session, graphs);
+    }
+    const component = graphs.all.add(row);
+    const succeeded = successful ? graphs.success.add(row) : undefined;
+    const scoreMilli = Math.floor(1000 * component.score + 1e-8);
+    const qualifying =
+      component.rows.size >= minEdges && scoreMilli >= minScore
+        ? component
+        : succeeded?.rows.size >= 2
+          ? succeeded
+          : undefined;
+    if (qualifying) {
+      const pending = [...qualifying.pending];
+      qualifying.pending.clear();
+      for (const r of pending)
+        if (!r.labels.includes("lateral_movement_candidate"))
+          r.labels.push("lateral_movement_candidate");
+      if (!qualifying.alert) {
+        const rows = [...qualifying.rows.values()];
+        qualifying.alert = alert(
           "lateral_movement_candidate",
-          chain,
-          "Connected unexpected service path under one identity/session with time-decayed evidence; correlation IDs and action names need not match. Denials are attempts, not proof of compromise.",
-          scoreMilli,
+          rows,
+          "Actor-wide connected unusual service edges across sessions. Two successful connected hops suffice; mixed attempts require the configured edge count and decayed score. Evidence grows within an incident; detected_at_ms is its first signal.",
+          Math.floor(qualifying.score * 1000 + 1e-8),
         );
+        qualifying.evidenceIDs = new Set(qualifying.alert.events);
+        qualifying.services = new Set(qualifying.alert.services);
+        qualifying.sessions = new Set(qualifying.alert.sessions);
+      } else {
+        const result = qualifying.alert;
+        for (const r of pending) {
+          if (!qualifying.evidenceIDs.has(r.event.event_id)) {
+            result.events.push(r.event.event_id);
+            qualifying.evidenceIDs.add(r.event.event_id);
+          }
+          for (const service of [
+            r.event.source_service,
+            r.event.target_service,
+          ])
+            if (!qualifying.services.has(service)) {
+              qualifying.services.add(service);
+              result.services.push(service);
+            }
+          if (
+            r.event.session_id &&
+            !qualifying.sessions.has(r.event.session_id)
+          ) {
+            qualifying.sessions.add(r.event.session_id);
+            result.sessions.push(r.event.session_id);
+          }
+          if (!r.alerts.includes(result.id)) r.alerts.push(result.id);
+          r.first_alert_at_ms = Math.min(
+            r.first_alert_at_ms ?? Infinity,
+            Math.max(result.detected_at_ms, r.received_ms),
+          );
+          result.uncertain_order ||= r.uncertain || r.out_of_order;
+        }
+        result.decayed_score_milli = Math.floor(qualifying.score * 1000 + 1e-8);
       }
     }
   }
@@ -575,7 +653,8 @@ function score(report, labels, positiveLabels) {
           0,
           Math.max(
             row.received_ms,
-            Math.min(...row.alerts.map((id) => byID.get(id).detected_at_ms)),
+            row.first_alert_at_ms ??
+              Math.min(...row.alerts.map((id) => byID.get(id).detected_at_ms)),
           ) - row.corrected_ms,
         ),
       );
@@ -605,4 +684,4 @@ function score(report, labels, positiveLabels) {
       "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency.",
   };
 }
-module.exports = { csv, detect, score, estimateClock, learn, time };
+module.exports = { csv, detect, score, estimateClock, learn, time, unique };

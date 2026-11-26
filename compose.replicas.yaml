@@ -19,18 +19,18 @@ services:
     ports: ["127.0.0.1:8451:8444"]
     volumes:
       - "${KIG_REPLICA_A_STATE:?Set private node A state directory}:/state"
-      - "${KIG_REPLICA_CONFIG:?Set read-only config/credentials directory}:/run/config:ro"
+      - "${KIG_REPLICA_A_CONFIG:?Set node A config directory}:/run/config:ro"
   replica-b:
     <<: *replica
     environment: { KIG_NODE_ID: replica-b }
     ports: ["127.0.0.1:8452:8444"]
     volumes:
       - "${KIG_REPLICA_B_STATE:?Set private node B state directory}:/state"
-      - "${KIG_REPLICA_CONFIG:?Set read-only config/credentials directory}:/run/config:ro"
+      - "${KIG_REPLICA_B_CONFIG:?Set node B config directory}:/run/config:ro"
   replica-c:
     <<: *replica
     environment: { KIG_NODE_ID: replica-c }
     ports: ["127.0.0.1:8453:8444"]
     volumes:
       - "${KIG_REPLICA_C_STATE:?Set private node C state directory}:/state"
-      - "${KIG_REPLICA_CONFIG:?Set read-only config/credentials directory}:/run/config:ro"
+      - "${KIG_REPLICA_C_CONFIG:?Set node C config directory}:/run/config:ro"

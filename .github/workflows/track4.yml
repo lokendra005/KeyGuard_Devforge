@@ -11,3 +11,4 @@ jobs:
       - run: node --test track4/test/*.test.cjs
       - run: node track4/test/vectors.cjs
       - run: node track4/test/detector-benchmark.cjs
+      - run: node track4/test/detector-topology-benchmark.cjs

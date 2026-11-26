@@ -6,6 +6,7 @@ const DEFAULT_POLICY = Object.freeze({
   max_storage_bytes: 16777216,
   max_events: 1000000,
   max_grace_ms: 60000,
+  max_lease_ms: 5000,
   request_lifetime_ms: 120000,
   mailbox_lifetime_ms: 300000,
   max_mail: 1000,
@@ -25,6 +26,7 @@ function authenticate(store, envelope, now, bootstrap = false) {
     envelope,
     {
       authority: store.get("authority"),
+      audience: "authority",
       policy: store.policy(),
       actor: store.db
         .prepare("SELECT * FROM actors WHERE id=?")
@@ -81,18 +83,25 @@ function setup(store, request, now) {
   for (const [key, value] of Object.entries(policy))
     C.integer(
       value,
-      key === "max_grace_ms" ? 0 : key.endsWith("lifetime_ms") ? 1000 : 1,
+      key === "max_grace_ms"
+        ? 0
+        : key === "max_lease_ms"
+          ? 100
+          : key.endsWith("lifetime_ms")
+            ? 1000
+            : 1,
       key === "max_events" ? 1000000000 : DEFAULT_POLICY[key],
     );
-  const assets = Object.keys(request.owners);
+  const assets = Object.keys(request.contents);
   C.check(
     assets.length <= policy.max_files &&
-      assets.length === Object.keys(request.contents).length &&
-      assets.every((id) => Object.hasOwn(request.contents, id)),
+      Object.keys(request.owners).every((id) =>
+        Object.hasOwn(request.contents, id),
+      ),
     "INVALID_INPUT",
   );
   const authority = C.random();
-  store.set("schema", 1);
+  store.set("schema", 2);
   store.set("authority", authority);
   store.loadedAuthority = authority;
   store.set("policy", policy);
@@ -128,22 +137,25 @@ function setup(store, request, now) {
       .prepare("INSERT INTO actors VALUES(?,?,0,1)")
       .run(identity.actor, identity.role);
     installKey(store, identity.actor, identity.public_key, now);
+    if (identity.role === "replicator")
+      require("./replication.cjs").bind(store, identity.actor, identity);
   }
-  for (const [asset, actor] of Object.entries(request.owners)) {
+  let bytes = 0;
+  for (const [asset, body] of Object.entries(request.contents)) {
+    const actor = Object.hasOwn(request.owners, asset)
+      ? C.text(request.owners[asset])
+      : null;
     C.text(asset);
-    C.text(actor);
-    C.text(request.contents[asset], policy.max_body_bytes);
-    store.db
-      .prepare("INSERT OR IGNORE INTO actors VALUES(?,?,0,1)")
-      .run(actor, "user");
-    store.putFile(asset, actor, request.contents[asset], 1);
+    C.text(body, policy.max_body_bytes);
+    bytes += Buffer.byteLength(body);
+    if (actor !== null)
+      store.db
+        .prepare("INSERT OR IGNORE INTO actors VALUES(?,?,0,1)")
+        .run(actor, "user");
+    store.putFile(asset, actor, body, 1);
   }
-  C.check(
-    store.db
-      .prepare("SELECT coalesce(sum(length(packet)),0) AS bytes FROM files")
-      .get().bytes <= policy.max_storage_bytes,
-    "STORAGE_CAPACITY",
-  );
+  C.check(bytes <= policy.max_storage_bytes, "STORAGE_CAPACITY");
+  store.set("plaintext_bytes", bytes);
   for (const actor of request.disabled || []) {
     C.text(actor);
     store.db
@@ -152,7 +164,7 @@ function setup(store, request, now) {
     store.db.prepare("UPDATE actors SET disabled=1 WHERE id=?").run(actor);
   }
   store.record(now, "setup", "local-operator", {
-    files: Object.keys(request.owners).length,
+    files: assets.length,
     identities: identities.length,
   });
   return { ready: true };
@@ -162,8 +174,9 @@ function info(store, actor) {
   const row = store.db.prepare("SELECT * FROM actors WHERE id=?").get(actor);
   C.check(row, "NOT_FOUND");
   return {
-    version: 1,
+    version: 2,
     authority: store.get("authority"),
+    audience: "authority",
     actor,
     epoch: row.epoch,
     disabled: !!row.disabled,
@@ -225,58 +238,23 @@ function executeTransaction(store, input, options = {}) {
     C.check(store.get("authority"), "NOT_INITIALIZED");
     const db = store.db;
     if (op === "replica.sync") {
-      C.check(isAdmin(auth) || auth.role === "replicator", "FORBIDDEN");
-      C.text(request.node_id, 256);
-      C.text(request.nonce, 128);
-      C.check(request.nonce.length >= 16, "INVALID_NONCE");
-      C.keyID(request.node_public_key);
-      const lease = C.integer(request.lease_ms, 100, 60000);
-      if (request.prefix) {
-        const p = request.prefix;
-        const row = db
-          .prepare("SELECT hash FROM events WHERE seq=?")
-          .get(C.integer(p.seq, 1, Number.MAX_SAFE_INTEGER));
-        C.check(
-          p.authority === store.get("authority") &&
-            p.public_key === store.audit.public_key &&
-            row &&
-            row.hash === p.hash,
-          "REPLICA_FORK",
-        );
-      }
-      const evidence = store.evidence(request.prefix);
-      const checkpoint = store.checkpoint();
-      const body = {
-        version: 1,
-        authority: store.get("authority"),
+      return require("./replication.cjs").sync(store, request, auth, now);
+    }
+    if (op === "replica.bind") {
+      requireAdmin(auth);
+      const actor = C.text(request.actor),
+        member = db.prepare("SELECT * FROM actors WHERE id=?").get(actor);
+      C.check(
+        member && member.role === "replicator" && !member.disabled,
+        "FORBIDDEN",
+      );
+      require("./replication.cjs").bind(store, actor, request);
+      store.record(now, op, auth.actor, {
+        actor,
         node_id: request.node_id,
-        nonce: request.nonce,
         node_public_key: request.node_public_key,
-        lease_ms: lease,
-        issued_ms: now,
-        checkpoint,
-        evidence,
-        policy: store.policy(),
-        actors: db.prepare("SELECT * FROM actors").all(),
-        keys: db.prepare("SELECT * FROM keys").all(),
-        files: db
-          .prepare("SELECT * FROM files")
-          .all()
-          .map((row) => ({
-            id: row.id,
-            owner: row.owner,
-            version: row.version,
-            body: store.file(row),
-          })),
-      };
-      return {
-        body,
-        signature: C.sign(
-          store.audit.private_key,
-          "KIG/replica-grant/v1",
-          body,
-        ),
-      };
+      });
+      return { bound: true };
     }
     if (op === "read" || op === "protected_read") {
       const actor = C.text(request.actor);
@@ -300,10 +278,21 @@ function executeTransaction(store, input, options = {}) {
           !prior || (prior.actor === actor && prior.asset === asset),
           "REQUEST_ID_CONFLICT",
         );
+        const event = store.record(now, op, actor, {
+          asset,
+          request_id: id,
+          decision,
+        });
         db.prepare(
-          "INSERT INTO reads VALUES(?,?,?,?) ON CONFLICT(id) DO NOTHING",
-        ).run(id, actor, asset, decision);
-        store.record(now, op, actor, { asset, request_id: id, decision });
+          "INSERT INTO reads VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING",
+        ).run(
+          id,
+          actor,
+          asset,
+          decision,
+          event.seq,
+          store.signRead({ id, actor, asset, decision, event_seq: event.seq }),
+        );
         return allowed ? { decision, body: store.file(file) } : { decision };
       }
       if (!allowed) {
@@ -343,6 +332,13 @@ function executeTransaction(store, input, options = {}) {
     }
     if (op === "audit") {
       const id = C.text(request.request_id);
+      if (request.node_id !== undefined)
+        return require("./replication.cjs").audit(
+          store,
+          request.node_id,
+          id,
+          auth,
+        );
       const row = db.prepare("SELECT * FROM reads WHERE id=?").get(id);
       C.check(
         row &&
@@ -351,6 +347,15 @@ function executeTransaction(store, input, options = {}) {
             auth.role === "auditor" ||
             row.actor === auth.actor),
         "NOT_FOUND",
+      );
+      const event = store.verifyRead(row);
+      C.check(
+        event.action === "read" &&
+          event.actor === row.actor &&
+          event.detail.asset === row.asset &&
+          event.detail.request_id === row.id &&
+          event.detail.decision === row.decision,
+        "READ_AUDIT_MISMATCH",
       );
       return { request_id: row.id, decision: row.decision };
     }
@@ -393,13 +398,18 @@ function executeTransaction(store, input, options = {}) {
           "CAPACITY",
         );
       const version = request.version + 1;
+      const oldBytes = file ? Buffer.byteLength(store.file(file)) : 0;
+      const total =
+        (store.get("plaintext_bytes") ??
+          db
+            .prepare("SELECT * FROM files")
+            .all()
+            .reduce((n, r) => n + Buffer.byteLength(store.file(r)), 0)) -
+        oldBytes +
+        Buffer.byteLength(request.body);
+      C.check(total <= store.policy().max_storage_bytes, "STORAGE_CAPACITY");
       store.putFile(asset, actor, request.body, version);
-      C.check(
-        db
-          .prepare("SELECT coalesce(sum(length(packet)),0) AS bytes FROM files")
-          .get().bytes <= store.policy().max_storage_bytes,
-        "STORAGE_CAPACITY",
-      );
+      store.set("plaintext_bytes", total);
       store.record(now, op, actor, { asset, version });
       return { version };
     }
@@ -415,13 +425,25 @@ function executeTransaction(store, input, options = {}) {
         C.verify(
           request.public_key,
           "KIG/enroll/v1",
-          { authority: store.get("authority"), actor, role: request.role },
+          {
+            authority: store.get("authority"),
+            actor,
+            role: request.role,
+            ...(request.role === "replicator"
+              ? {
+                  node_id: request.node_id,
+                  node_public_key: request.node_public_key,
+                }
+              : {}),
+          },
           request.proof,
         ),
         "INVALID_PROOF",
       );
       db.prepare("INSERT INTO actors VALUES(?,?,0,1)").run(actor, request.role);
       const key_id = installKey(store, actor, request.public_key, now);
+      if (request.role === "replicator")
+        require("./replication.cjs").bind(store, actor, request);
       store.record(now, op, auth.actor, {
         target: actor,
         role: request.role,
@@ -448,6 +470,8 @@ function executeTransaction(store, input, options = {}) {
             .get("admin").n > 1,
           "LAST_ADMIN",
         );
+      if (request.role === "replicator" && member.role !== "replicator")
+        require("./replication.cjs").bind(store, actor, request);
       db.prepare("UPDATE actors SET role=?,epoch=epoch+1 WHERE id=?").run(
         request.role,
         actor,
@@ -688,17 +712,23 @@ function executeTransaction(store, input, options = {}) {
       requireAdmin(auth);
       C.check(Array.isArray(request.events), "INVALID_EVENTS");
       const prior = store.get("detector_events") || [];
-      const byID = new Map(prior.map((e) => [e.event_id, e]));
-      for (const event of request.events) {
-        const previous = byID.get(event.event_id);
-        C.check(
-          !previous || C.digest(previous) === C.digest(event),
-          "EVENT_ID_CONFLICT",
-        );
-        byID.set(event.event_id, event);
-      }
-      const events = [...byID.values()];
       const config = request.config || store.get("detector_config");
+      const replicaEvents =
+        request.include_replica_reads === false
+          ? []
+          : require("./replication.cjs")
+              .observations(store)
+              .filter(
+                (e) =>
+                  !config?.baseline ||
+                  Date.parse(e.event_time_utc) >
+                    config.baseline.reference_end_ms,
+              );
+      const events = require("./detect.cjs").unique([
+        ...prior,
+        ...request.events,
+        ...replicaEvents,
+      ]);
       const approvals = request.approvals || store.get("detector_approvals");
       const report = require("./detect.cjs").detect(events, approvals, config);
       store.set("detector_events", events);
@@ -734,8 +764,9 @@ function execute(store, input, options = {}) {
 }
 function command(identity, details, body, now = Date.now()) {
   const request = {
-    version: 1,
+    version: 2,
     authority: details.authority,
+    audience: details.audience || "authority",
     actor: details.actor,
     key_id: C.keyID(identity.public_key),
     epoch: details.epoch,
@@ -745,7 +776,7 @@ function command(identity, details, body, now = Date.now()) {
   };
   return {
     ...request,
-    signature: C.sign(identity.private_key, "KIG/command/v1", request),
+    signature: C.sign(identity.private_key, "KIG/command/v2", request),
   };
 }
 module.exports = { execute, info, command, DEFAULT_POLICY };

@@ -45,8 +45,14 @@ function client(base, identity, actor, ca) {
           response.on("end", () => {
             try {
               const result = C.parse(Buffer.concat(chunks));
-              if (response.statusCode !== 200)
-                throw new C.Fault(result.error || "REMOTE_FAILURE");
+              if (response.statusCode !== 200) {
+                const error = new C.Fault(result.error || "REMOTE_FAILURE");
+                if (result.label === "conflicting_duplicate") {
+                  error.label = result.label;
+                  error.event_id = result.event_id;
+                }
+                throw error;
+              }
               resolve(result);
             } catch (e) {
               reject(e);
@@ -73,7 +79,7 @@ function client(base, identity, actor, ca) {
       ...body,
       signature: C.sign(
         identity.private_key,
-        "KIG/identity-bootstrap/v1",
+        "KIG/identity-bootstrap/v2",
         body,
       ),
     });

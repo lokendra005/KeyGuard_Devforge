@@ -10,6 +10,7 @@ else
 fi
 node track4/test/detector-benchmark.cjs > evidence/detector-holdout.json
 node track4/test/detector-benchmark.cjs 987654321 > evidence/detector-renamed-holdout.json
+node track4/test/detector-topology-benchmark.cjs > evidence/detector-topology-holdout.json
 if [ -n "${TOOLKIT_DIR:-}" ]; then
  "${PYTHON:-python3.12}" "$TOOLKIT_DIR/validate.py" --entry "$PWD/track4_service.cjs" > evidence/official-validator.log 2>&1
  "${PYTHON:-python3.12}" track4/test/interop.py > evidence/pqcrypto-interop.log 2>&1

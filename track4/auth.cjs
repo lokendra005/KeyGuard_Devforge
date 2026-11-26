@@ -5,13 +5,14 @@ function verifyCommand(envelope, context, now, bootstrap = false) {
   const { signature, ...request } = envelope;
   C.check(
     Object.keys(request).sort().join(",") ===
-      "actor,authority,body,epoch,expires,key_id,nonce,version",
+      "actor,audience,authority,body,epoch,expires,key_id,nonce,version",
     "INVALID_ENVELOPE",
   );
   C.check(
-    request.version === 1 && request.authority === context.authority,
+    request.version === 2 && request.authority === context.authority,
     "WRONG_AUTHORITY",
   );
+  C.check(request.audience === context.audience, "WRONG_AUDIENCE");
   C.text(request.actor);
   C.text(request.key_id, 96);
   C.text(request.nonce, 128);
@@ -22,7 +23,7 @@ function verifyCommand(envelope, context, now, bootstrap = false) {
   C.check(
     C.verify(
       key.public_key,
-      bootstrap ? "KIG/identity-bootstrap/v1" : "KIG/command/v1",
+      bootstrap ? "KIG/identity-bootstrap/v2" : "KIG/command/v2",
       request,
       signature,
     ),

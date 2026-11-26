@@ -15,7 +15,8 @@ const HELP = `Key Identity Guard / Track 4 (Node 24.11.1; no npm install)
   request --url URL --actor ID --key KEY --body JSON [--ca PEM]
   prepare --url URL --actor ID --key KEY --body JSON --out SIGNED_JSON
   submit --url URL --input SIGNED_JSON
-  enroll --url URL --actor ADMIN --key KEY --target ID --role ROLE --new-key NEW
+  replica-init --state DIR --node ID --trust TRUST_JSON --out BINDING_JSON
+  enroll --url URL --actor ADMIN --key KEY --target ID --role ROLE --new-key NEW [--binding BINDING_JSON]
   rotate --url URL --actor ID --key OLD --new-key NEW --grace-ms MS
   recovery-prepare --url URL --actor CUSTODIAN --key KEY --target ID --new-key NEW --out BODY
   dashboard --url URL --actor ID --key KEY
@@ -71,6 +72,7 @@ async function main(args = process.argv.slice(2)) {
     "trust",
     "reference",
     "replica",
+    "binding",
   ];
   const { values: v, positionals } = parseArgs({
     args,
@@ -142,6 +144,23 @@ async function main(args = process.argv.slice(2)) {
       );
     if (v.out) save(v.out, report);
     return report;
+  }
+  if (op === "replica-init") {
+    const node = new (require("./replica.cjs").Replica)({
+      directory: v.state,
+      node: v.node,
+      trust: read(v.trust),
+    });
+    try {
+      const binding = {
+        node_id: node.node,
+        node_public_key: node.audit.public_key,
+      };
+      save(v.out, binding);
+      return binding;
+    } finally {
+      node.close();
+    }
   }
   if (op === "serve") {
     const host = v.host || "127.0.0.1";
@@ -231,7 +250,9 @@ async function main(args = process.argv.slice(2)) {
   if (op === "enroll") {
     const key = read(v["new-key"]);
     const details = await remote.info(v.actor);
+    const binding = v.role === "replicator" ? read(v.binding) : {};
     const body = {
+      ...binding,
       op: "enroll",
       actor: v.target,
       role: v.role,
@@ -240,6 +261,7 @@ async function main(args = process.argv.slice(2)) {
         authority: details.authority,
         actor: v.target,
         role: v.role,
+        ...binding,
       }),
     };
     return remote.call(body);
@@ -364,6 +386,9 @@ if (require.main === module)
       process.stderr.write(
         JSON.stringify({
           error: error instanceof C.Fault ? error.code : "COMMAND_FAILED",
+          ...(error.label
+            ? { label: error.label, event_id: error.event_id }
+            : {}),
         }) + "\n",
       );
       process.exitCode = 1;

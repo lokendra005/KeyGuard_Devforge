@@ -30,10 +30,14 @@ function server(options = {}) {
     ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
     ["/style.css", ["style.css", "text/css; charset=utf-8"]],
   ]);
-  const rates = new Map();
+  const rates = new Map(),
+    active = new Map();
   let inflight = 0;
   const handler = async (req, res) => {
-    let admitted = false;
+    req.socket.emit("kig-headers");
+    let admitted = false,
+      bodyTimer;
+    const peer = req.socket.remoteAddress;
     res.setHeader(
       "Content-Security-Policy",
       "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
@@ -61,10 +65,11 @@ function server(options = {}) {
         !req.headers.origin || req.headers.origin === origin,
         "WRONG_ORIGIN",
       );
+      C.check((active.get(peer) || 0) < 4, "BUSY");
       C.check(inflight < 32, "BUSY");
+      active.set(peer, (active.get(peer) || 0) + 1);
       inflight++;
       admitted = true;
-      const peer = req.socket.remoteAddress;
       const minute = Math.floor(Date.now() / 60000);
       for (const [key, bucket] of rates)
         if (bucket.minute < minute) rates.delete(key);
@@ -93,7 +98,8 @@ function server(options = {}) {
       }
       if (req.method === "GET" && url.pathname === "/v1/context") {
         send(200, {
-          version: 1,
+          version: 2,
+          audience: options.replica ? store.node : "authority",
           authority: store.get("authority"),
           request_lifetime_ms: store.policy().request_lifetime_ms,
         });
@@ -128,6 +134,11 @@ function server(options = {}) {
         ),
         "UNSUPPORTED_CONTENT_TYPE",
       );
+      bodyTimer = setTimeout(
+        () => req.destroy(new C.Fault("BODY_TIMEOUT")),
+        5000,
+      );
+      bodyTimer.unref();
       const chunks = [];
       let size = 0;
       for await (const chunk of req) {
@@ -135,6 +146,7 @@ function server(options = {}) {
         C.check(size <= 16 * 1024 * 1024, "INPUT_TOO_LARGE");
         chunks.push(chunk);
       }
+      clearTimeout(bodyTimer);
       const envelope = C.object(C.parse(Buffer.concat(chunks)));
       send(
         200,
@@ -142,7 +154,7 @@ function server(options = {}) {
         !!options.replica,
       );
     } catch (error) {
-      if (!res.headersSent) {
+      if (!res.headersSent && !res.destroyed) {
         const code = error instanceof C.Fault ? error.code : "REQUEST_FAILED";
         const status = [
           "UNAUTHORIZED",
@@ -155,10 +167,22 @@ function server(options = {}) {
             : code === "NOT_FOUND"
               ? 404
               : 400;
-        send(status, { error: code });
+        res.setHeader("Connection", "close");
+        send(status, {
+          error: code,
+          ...(error.label
+            ? { label: error.label, event_id: error.event_id }
+            : {}),
+        });
       } else res.end();
     } finally {
-      if (admitted) inflight--;
+      clearTimeout(bodyTimer);
+      if (admitted) {
+        inflight--;
+        const count = active.get(peer) - 1;
+        if (count) active.set(peer, count);
+        else active.delete(peer);
+      }
     }
   };
   const api = options.cert
@@ -167,12 +191,30 @@ function server(options = {}) {
           cert: fs.readFileSync(options.cert),
           key: fs.readFileSync(options.tlsKey),
           minVersion: "TLSv1.3",
+          handshakeTimeout: 5000,
+          requestTimeout: 5000,
+          headersTimeout: 5000,
+          connectionsCheckingInterval: 250,
         },
         handler,
       )
-    : http.createServer(handler);
-  api.requestTimeout = 10000;
-  api.headersTimeout = 10000;
+    : http.createServer(
+        {
+          requestTimeout: 5000,
+          headersTimeout: 5000,
+          connectionsCheckingInterval: 250,
+        },
+        handler,
+      );
+  api.requestTimeout = 5000;
+  api.headersTimeout = 5000;
+  // Enforce a wall-clock header deadline, independent of Node's periodic timeout sweep.
+  api.on("connection", (socket) => {
+    const timer = setTimeout(() => socket.destroy(), 5000);
+    timer.unref();
+    socket.once("close", () => clearTimeout(timer));
+    socket.once("kig-headers", () => clearTimeout(timer));
+  });
   api.maxHeadersCount = 32;
   api.keepAliveTimeout = 2000;
   api.on("close", () => store.close());

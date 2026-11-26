@@ -56,7 +56,43 @@ function fixture(t, options = {}) {
   function trusted(operation) {
     return S.execute(store, operation, { trusted: true });
   }
+  const replicaCredentials = new Map();
+  function registerReplica(request) {
+    if (!replicaCredentials.has(request.node_id)) {
+      const identity = C.generate(),
+        actor = "replicator/" + C.random();
+      const binding = {
+        node_id: request.node_id,
+        node_public_key: request.node_public_key,
+      };
+      const proposal = {
+        authority: store.get("authority"),
+        actor,
+        role: "replicator",
+        ...binding,
+      };
+      call("admin", {
+        op: "enroll",
+        actor,
+        role: "replicator",
+        public_key: identity.public_key,
+        ...binding,
+        proof: C.sign(identity.private_key, "KIG/enroll/v1", proposal),
+      });
+      replicaCredentials.set(request.node_id, { identity, actor });
+    }
+    return replicaCredentials.get(request.node_id);
+  }
+  function sync(request) {
+    const { identity, actor } = registerReplica(request);
+    return S.execute(
+      store,
+      S.command(identity, S.info(store, actor), request, now),
+    );
+  }
   return {
+    registerReplica,
+    sync,
     directory,
     store,
     keys,

@@ -12,7 +12,6 @@ for (const [actor, role] of [
   ["recipient", "user"],
   ["operator", "admin"],
   ["custodian", "recovery"],
-  ["node", "replicator"],
 ]) {
   const key = C.generate();
   writeExclusive(

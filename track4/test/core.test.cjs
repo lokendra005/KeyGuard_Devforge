@@ -526,7 +526,7 @@ test("audit and file capacity failures preserve previously acknowledged state", 
         actor: f.actors.owner,
         asset: f.asset,
         version: 1,
-        body: "X".repeat(900),
+        body: "X".repeat(1001),
       }),
     "STORAGE_CAPACITY",
   );
@@ -651,12 +651,19 @@ test("three fresh worker nodes enforce completed revocation with measured observ
         },
         stdio: ["pipe", "pipe", "pipe"],
       });
-      let data = "";
+      let data = "",
+        diagnostics = "";
+      child.stderr.on("data", (b) => (diagnostics += b));
       child.stdout.on("data", (b) => (data += b));
       child.on("error", reject);
       child.on("close", (status) =>
         status === 0
-          ? resolve({ result: C.parse(data), start, end: performance.now() })
+          ? resolve({
+              result: C.parse(data),
+              diagnostics,
+              start,
+              end: performance.now(),
+            })
           : reject(new Error("child failed")),
       );
       child.stdin.end(JSON.stringify(request));
@@ -673,7 +680,16 @@ test("three fresh worker nodes enforce completed revocation with measured observ
       }),
     ),
   );
-  A.ok(before.every((r) => r.result.decision === "allow"));
+  A.ok(
+    before.every((r) => r.result.decision === "allow"),
+    JSON.stringify(
+      before.map((r) => ({
+        decision: r.result.decision,
+        error: r.result.error,
+        diagnostics: r.diagnostics,
+      })),
+    ),
+  );
   const revoke = await invoke(nodes[0], {
     op: "revoke",
     actor: f.actors.owner,
@@ -688,7 +704,16 @@ test("three fresh worker nodes enforce completed revocation with measured observ
       }),
     ),
   );
-  A.ok(after.every((r) => r.result.decision === "deny"));
+  A.ok(
+    after.every((r) => r.result.decision === "deny"),
+    JSON.stringify(
+      after.map((r) => ({
+        decision: r.result.decision,
+        error: r.result.error,
+        diagnostics: r.diagnostics,
+      })),
+    ),
+  );
   t.diagnostic(
     JSON.stringify({
       nodes: nodes.length,

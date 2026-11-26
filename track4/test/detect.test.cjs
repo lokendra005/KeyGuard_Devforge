@@ -151,8 +151,17 @@ test("CSV record boundaries and event identity cannot be injected or silently ov
   for (const raw of ["a,a\n1,2", "a,b\n1", 'a\n"unclosed', 'a\n"x"suffix'])
     A.throws(() => D.csv(raw));
   const e = event(C.random(), Date.now());
+  A.equal(
+    D.detect([e, e], { changes: [] }, { allowed_edges: [] }).events.length,
+    1,
+  );
   A.throws(
-    () => D.detect([e, e], { changes: [] }, { allowed_edges: [] }),
-    (e) => e.code === "DUPLICATE_EVENT",
+    () =>
+      D.detect(
+        [e, { ...e, outcome: "denied" }],
+        { changes: [] },
+        { allowed_edges: [] },
+      ),
+    (e) => e.code === "DUPLICATE_EVENT" && e.label === "conflicting_duplicate",
   );
 });
