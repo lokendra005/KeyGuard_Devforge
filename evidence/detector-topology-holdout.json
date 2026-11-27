@@ -25,7 +25,7 @@
     "false_alerted_events_per_1000_benign": 0,
     "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
   },
-  "elapsed_ms": 137,
+  "elapsed_ms": 226,
   "protocol": "Separate implementation, LCG random source, mesh/hub topology, outcome synonyms, distinct sessions, 5-minute slow hops and 8-minute two-hop paths. Frozen disjoint reference. Labels never enter detection. Unknown benign two-edge fan-out and isolated malicious access are explicit ambiguity cases; no threshold fitting.",
   "timing": {
     "offset_ms": [

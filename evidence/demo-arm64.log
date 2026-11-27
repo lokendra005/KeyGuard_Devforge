@@ -14,13 +14,13 @@ repeat protected_read
 {"error":"REPLAY","process_exit":0}
 
 revoke owner
-{"effective_at_ms":1795743912550,"effective_everywhere_at_ms":1795743912550,"replica_grace_ms":0,"revoked":true}
+{"effective_at_ms":1795745275061,"effective_everywhere_at_ms":1795745275061,"replica_grace_ms":0,"revoked":true}
 
 read after revocation
 {"decision":"deny"}
 
 audit the denied request
-{"decision":"deny","request_id":"dfda7de369188e0dffe36260e9387d6c288a28949a3499b9"}
+{"decision":"deny","inclusion":{"leaf_index":4,"proof":["3bbafd773484b3ab874632dfdb42bd2241b29834883952fbe50593396b557c8cfbaf2f9a999dc99c0eec4a332e88cca0","0c6b4433bd7f94495f77adeac6b7d5ba53314137bf02f078f5f0159d30864dc42ed2f8bd39fbbc1cb1f06f22c11cbc51"],"root":"8faa2fb113b67abc9fb1a84198bb159768583a89bf789fb36b290f3c3b90e18d05b8aa9b77646b709dcbda060354edfb","tree_size":6},"request_id":"48de930872f30f5bf9205b78b294cadbf44778a4b0bdc845"}
 
 unknown actor revocation is a structured error
 {"error":"NOT_FOUND"}
@@ -34,107 +34,122 @@ old scenario is inaccessible
 new scenario's owner can read
 {"body":"New scenario resource.","decision":"allow"}
 
-✔ owner policy, opaque IDs, denial audit and at-rest secrecy share real storage (47.556708ms)
-✔ retrying a read correlation ID rechecks policy and preserves both historical decisions (7.282416ms)
-✔ ML-KEM protected read binds exact challenge/body; invalid keys and replays fail closed (17.13075ms)
-✔ signed commands reject substitution, replay, wrong authority, stale epochs and expired requests (12.578875ms)
-✔ rotation has a precise cutoff, preserves content and rejects prior-epoch authorization (24.003625ms)
-✔ two-person recovery fences competing proposals and permanently retires old keys (31.215375ms)
-✔ failed persistence rolls back rotation and data, and clocks cannot silently regress (7.603625ms)
-✔ signed audit rejects edits, truncation and text injection without conflating records (16.226916ms)
-✔ encrypted key and authority backups verify corruption, wrong passwords and stale anchors (645.172667ms)
-✔ strict JSON rejects duplicate fields, malformed UTF-8, unsafe numbers and deep nesting (13.167625ms)
-✔ permission changes fence prepared actions and transfer file ownership atomically (15.413ms)
-✔ noncanonical public-key encodings and missing master keys cannot create new identities silently (3.806375ms)
-✔ audit and file capacity failures preserve previously acknowledged state (7.75825ms)
-✔ actual process-per-request adapter persists policy and rejects oversized or malformed input (148.263708ms)
-✔ SIGKILL during rotation recovers the prior committed key and preserved revocation (31.336834ms)
-✔ three fresh worker nodes enforce completed revocation with measured observer latency (106.400917ms)
-ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":32,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
-✔ worker temp fallback, empty opaque names and startup schema fences are explicit (64.912959ms)
-✔ RFC3339 offsets/microseconds parse without accepting ambiguous or impossible dates (0.631042ms)
-✔ frozen reference baseline handles renamed actions, self-approval, revocation, 70s paths, absent correlation and harmless novelty (209.518459ms)
-✔ 12,000 held-out observations are evaluated without the old 10k cap (604.782084ms)
-✔ role regrant supersedes an earlier revocation but not a later one (0.583375ms)
-✔ organizer practice set: every alerted event is a labelled finding, every finding is alerted (12.151333ms)
-✔ unknown outcomes, revocation subjects, reinstatement and bad records fail safely (1.242709ms)
-✔ quarantine is never silent: decoys, malformed records and misused approvals alert (14.414375ms)
-✔ CSV exports with a byte-order mark, CRLF, trailing blank lines or header case parse identically (6.267208ms)
-✔ two-hop witnesses require an ordered pivot; three-edge fan-out and failed probes remain detectable (25.491583ms)
-✔ pivot evidence excludes unrelated spokes, respects uncertainty, and retains older valid repeated-edge witnesses (14.335875ms)
-✔ trusted route familiarity is actor-scoped, window-bounded, and cannot suppress role or revocation findings (9.276542ms)
-✔ labels, names and receipt ordering do not manufacture benign exceptions; ambiguous fan-out remains visible (3.893375ms)
-✔ interval-sweep pivot index agrees with exhaustive witnesses under expiry, repeat edges and adversarial uncertainty (24.797833ms)
-✔ outcome mappings cover synonyms and overrides; exact repeated input never inflates learning or detection (16.460042ms)
-✔ actor-wide undirected components catch fan-out, reversed edges, slow chains and two successful hops (1.179667ms)
-✔ independent topology holdout measures misses and false positives without importing the original generator (542.526334ms)
-✔ sliding graph agrees with independent breadth-first components across expiry, retries and bridges (29.128208ms)
-✔ large fan-out retains complete evidence without quadratic alert duplication (268.647ms)
-✔ detector uses approval identity, role and interval, never labels or fixed event IDs (5.608416ms)
-✔ connected unexpected paths flag valid credential use; isolated and unrelated denials do not (1.720875ms)
-✔ clock normalization preserves raw evidence, flags uncertain order and handles late prerequisites (0.743625ms)
-✔ CSV record boundaries and event identity cannot be injected or silently overwritten (0.710333ms)
-✔ HTTP uses the same authority; public raw actor assertions cannot bypass signatures (133.179917ms)
-✔ real CLI sender/receiver deliver an encrypted file through HTTP and acknowledge it (1140.838042ms)
-✔ identity metadata needs proof of key possession and forged HTTP requests do not inflate the signed log (48.706708ms)
-✔ real HTTP replica sync serves cached signed reads and fails closed when sync stops (2094.268834ms)
-✔ slow uploads have per-IP concurrency and wall-clock deadlines; aborted requests release admission (5069.084752ms)
-✔ HTTP ingestion deduplicates exact retries and exposes a conflicting-duplicate diagnostic (35.800833ms)
-✔ slow uploads from many source addresses cannot exhaust the body pool or block GETs (324.988625ms)
-✔ one address cannot fill the shared upload buffer by stalling large bodies (823.610917ms)
-✔ one-time KEM message decrypts only after complete authenticated reassembly; duplicates are rejected (20.663583ms)
+✔ owner policy, opaque IDs, denial audit and at-rest secrecy share real storage (46.50425ms)
+✔ retrying a read correlation ID rechecks policy and preserves both historical decisions (14.095417ms)
+✔ ML-KEM protected read binds exact challenge/body; invalid keys and replays fail closed (15.807834ms)
+✔ signed commands reject substitution, replay, wrong authority, stale epochs and expired requests (19.04675ms)
+✔ rotation has a precise cutoff, preserves content and rejects prior-epoch authorization (42.879166ms)
+✔ two-person recovery fences competing proposals and permanently retires old keys (53.13875ms)
+✔ failed persistence rolls back rotation and data, and clocks cannot silently regress (12.347542ms)
+✔ signed audit rejects edits, truncation and text injection without conflating records (6.03175ms)
+✔ encrypted key and authority backups verify corruption, wrong passwords and stale anchors (650.947917ms)
+✔ strict JSON rejects duplicate fields, malformed UTF-8, unsafe numbers and deep nesting (17.671125ms)
+✔ permission changes fence prepared actions and transfer file ownership atomically (78.285792ms)
+✔ noncanonical public-key encodings and missing master keys cannot create new identities silently (13.175417ms)
+✔ audit and file capacity failures preserve previously acknowledged state (13.048666ms)
+✔ actual process-per-request adapter persists policy and rejects oversized or malformed input (421.258458ms)
+✔ SIGKILL during rotation recovers the prior committed key and preserved revocation (90.522ms)
+✔ three fresh worker nodes enforce completed revocation with measured observer latency (209.278625ms)
+ℹ {"nodes":3,"topology":"fresh local worker processes, one SQLite authority","observed_after_ack_ms":80,"timing":"same observer monotonic clock; includes process startup, not geographically distributed propagation"}
+✔ worker temp fallback, empty opaque names and startup schema fences are explicit (143.674959ms)
+✔ every alert carries a non-empty ATT&CK mapping with valid technique ids (10.885209ms)
+✔ hlc-stamped events delivered shuffled produce the same alerts as ordered delivery (18.081583ms)
+✔ HLC is monotonic when the physical clock goes backwards and receive merges max (0.639583ms)
+✔ RFC3339 offsets/microseconds parse without accepting ambiguous or impossible dates (0.904541ms)
+✔ frozen reference baseline handles renamed actions, self-approval, revocation, 70s paths, absent correlation and harmless novelty (312.526875ms)
+✔ 12,000 held-out observations are evaluated without the old 10k cap (615.012334ms)
+✔ role regrant supersedes an earlier revocation but not a later one (28.961875ms)
+✔ organizer practice set: every alerted event is a labelled finding, every finding is alerted (38.952375ms)
+✔ unknown outcomes, revocation subjects, reinstatement and bad records fail safely (1.985041ms)
+✔ quarantine is never silent: decoys, malformed records and misused approvals alert (20.536334ms)
+✔ CSV exports with a byte-order mark, CRLF, trailing blank lines or header case parse identically (8.667417ms)
+✔ two-hop witnesses require an ordered pivot; three-edge fan-out and failed probes remain detectable (49.774917ms)
+✔ pivot evidence excludes unrelated spokes, respects uncertainty, and retains older valid repeated-edge witnesses (46.282083ms)
+✔ trusted route familiarity is actor-scoped, window-bounded, and cannot suppress role or revocation findings (14.855167ms)
+✔ labels, names and receipt ordering do not manufacture benign exceptions; ambiguous fan-out remains visible (3.993375ms)
+✔ interval-sweep pivot index agrees with exhaustive witnesses under expiry, repeat edges and adversarial uncertainty (37.16575ms)
+✔ outcome mappings cover synonyms and overrides; exact repeated input never inflates learning or detection (18.269ms)
+✔ actor-wide undirected components catch fan-out, reversed edges, slow chains and two successful hops (3.056ms)
+✔ independent topology holdout measures misses and false positives without importing the original generator (611.767666ms)
+✔ sliding graph agrees with independent breadth-first components across expiry, retries and bridges (33.740791ms)
+✔ large fan-out retains complete evidence without quadratic alert duplication (478.495167ms)
+✔ detector uses approval identity, role and interval, never labels or fixed event IDs (6.1655ms)
+✔ connected unexpected paths flag valid credential use; isolated and unrelated denials do not (2.861708ms)
+✔ clock normalization preserves raw evidence, flags uncertain order and handles late prerequisites (0.795416ms)
+✔ CSV record boundaries and event identity cannot be injected or silently overwritten (0.470916ms)
+✔ HTTP uses the same authority; public raw actor assertions cannot bypass signatures (544.864667ms)
+✔ real CLI sender/receiver deliver an encrypted file through HTTP and acknowledge it (1271.230292ms)
+✔ identity metadata needs proof of key possession and forged HTTP requests do not inflate the signed log (90.892916ms)
+✔ real HTTP replica sync serves cached signed reads and fails closed when sync stops (2119.36871ms)
+✔ slow uploads have per-IP concurrency and wall-clock deadlines; aborted requests release admission (5091.42192ms)
+✔ HTTP ingestion deduplicates exact retries and exposes a conflicting-duplicate diagnostic (175.643167ms)
+✔ slow uploads from many source addresses cannot exhaust the body pool or block GETs (323.29ms)
+✔ one address cannot fill the shared upload buffer by stalling large bodies (829.545626ms)
+✔ merkle root, inclusion and consistency agree with brute force for sizes 1..70 (1492.981792ms)
+✔ audit op inclusion proof verifies against the signed tree head (ML-DSA + SLH-DSA) (580.493208ms)
+✔ one-time KEM message decrypts only after complete authenticated reassembly; duplicates are rejected (48.637417ms)
 ▶ message recipient, sender, suite, authority, chunks and ciphertext are authenticated
-  ✔ to (17.565792ms)
-  ✔ from (9.768291ms)
-  ✔ authority (12.763375ms)
-  ✔ suite (6.685ms)
-  ✔ offer_id (10.326541ms)
-  ✔ expires (11.231125ms)
-  ✔ chunks (6.526166ms)
-  ✔ nonce (5.938625ms)
-  ✔ digest (4.771125ms)
-  ✔ ciphertext corruption (11.819667ms)
-✔ message recipient, sender, suite, authority, chunks and ciphertext are authenticated (99.611958ms)
-✔ bounded loss recovery delivers exactly once; incomplete expired messages report failure (8.748958ms)
-✔ relay stores ciphertext, supports partial retries and checks both peers at every operation (52.725959ms)
-✔ random messages, empty bodies and chunk boundaries round-trip under shuffled delivery (67.307084ms)
-✔ v2 signed audiences prevent authority/node and cross-node replay, including bootstrap (58.038959ms)
-✔ replication requires an enrolled node/key binding, caps leases and audits each plaintext export (45.198958ms)
-✔ delta sync sends only changed records, imports signed read logs exactly once, and survives a lost response (113.2015ms)
-✔ node log forgery, key substitution, gaps and conflicting replays cannot commit or renew a lease (57.506208ms)
-✔ unowned UTF-8 assets deny all readers, and plaintext storage budgets are exact (12.418917ms)
-✔ read index changes, replacement with a later event, and damaged signed payloads fail closed (17.190333ms)
-✔ signed persisted checkpoints verify only the suffix on cold start and reject signature/truncation attacks (185.766875ms)
-✔ replica restart retains the merged delta state and uploaded-log cursor but never restores a lease (88.137125ms)
-✔ old authority tables upgrade without replacing keys, file ciphertext or signed history (30.039833ms)
-✔ independent millisecond clock anchors merge forward without weakening explicit rollback checks (24.765584ms)
-✔ a stolen replicator credential without the node private key cannot export, and captured sync requests cannot be replayed (30.929875ms)
-✔ revoke reports when it holds on every replica, including outstanding leases (31.984542ms)
-✔ rotation, role changes and ownership transfers also report when they hold on every replica (30.8215ms)
-✔ one admin cannot satisfy two-person recovery with custodians it enrolled, and cannot remove the last admin (43.109083ms)
-✔ independent replica cache verifies signature, node binding, fresh challenge and chain continuity (85.97525ms)
-✔ delayed grants cannot extend leases; partitions, monotonic rollback and restart fail closed (88.981ms)
-✔ replica-role credentials cannot perform administrative mutations (39.6265ms)
-REPLICA_MEASUREMENT {"nodes":5,"independent_databases":5,"lease_ms":3000,"injected_sync_delays_ms":[50,150,300],"partitions":2,"p50_ms":340,"max_ms":2988,"observations":[{"node":0,"partitioned":false,"observed_ms":66,"reason":"UNAUTHORIZED"},{"node":1,"partitioned":false,"observed_ms":188,"reason":"UNAUTHORIZED"},{"node":2,"partitioned":false,"observed_ms":340,"reason":"UNAUTHORIZED"},{"node":3,"partitioned":true,"observed_ms":2957,"reason":"LEASE_EXPIRED"},{"node":4,"partitioned":true,"observed_ms":2988,"reason":"LEASE_EXPIRED"}],"measurement":"Single-observer monotonic elapsed time after revocation acknowledgement, 20ms polling; separate OS processes and encrypted caches; sync transport delayed/withheld by harness, not a physical WAN benchmark. Five samples only."}
-✔ five independent processes enforce revocation with delayed sync and two partitions (3536.096835ms)
-✔ worker scenarios reset atomically; expected errors use JSON exit zero and omit SQLite noise (573.482125ms)
-✔ forged requests cannot consume audit capacity; revocation and raising budget work at the soft limit (204.30075ms)
-✔ status verifies only the signed suffix after its cached checkpoint; full exported history still verifies (8.74725ms)
-✔ temporary wall-clock jumps do not poison an already running authority's monotonic time (6.014416ms)
-✔ protected-read replay storage expires at a documented finite window (5.80625ms)
-✔ per-recipient offer quotas leave capacity for other actors (14.256666ms)
-✔ partial transfers survive receiver rotation during grace and fail exactly at cutoff (27.986958ms)
-✔ signed ingestion persists and evaluates more than ten thousand real observations (705.710208ms)
-✔ SQLite notice filtering preserves unrelated runtime warnings (13.980375ms)
-✔ worker reads and audits fail closed in the contract shape on any error (144.673458ms)
-ℹ tests 90
+  ✔ to (23.926292ms)
+  ✔ from (7.3965ms)
+  ✔ authority (7.232209ms)
+  ✔ suite (7.345125ms)
+  ✔ offer_id (11.842708ms)
+  ✔ expires (6.806125ms)
+  ✔ chunks (12.9345ms)
+  ✔ nonce (18.837792ms)
+  ✔ digest (10.119458ms)
+  ✔ x25519_ephemeral (7.731291ms)
+  ✔ ciphertext corruption (11.120083ms)
+✔ message recipient, sender, suite, authority, chunks and ciphertext are authenticated (127.1745ms)
+✔ bounded loss recovery delivers exactly once; incomplete expired messages report failure (17.247291ms)
+✔ relay stores ciphertext, supports partial retries and checks both peers at every operation (85.324375ms)
+✔ random messages, empty bodies and chunk boundaries round-trip under shuffled delivery (83.336166ms)
+▶ hybrid X25519+ML-KEM: both secrets required, X25519 keys bound, suite downgrade rejected
+  ✔ sender X25519 ephemeral substitution fails authentication (17.260959ms)
+  ✔ offer X25519 key tampering is rejected by the signed offer (4.53725ms)
+  ✔ signed downgrade to the ML-KEM-only suite is rejected (9.035166ms)
+  ✔ white-box: key derivation needs BOTH shared secrets (18.489541ms)
+✔ hybrid X25519+ML-KEM: both secrets required, X25519 keys bound, suite downgrade rejected (50.071291ms)
+✔ v2 signed audiences prevent authority/node and cross-node replay, including bootstrap (141.080708ms)
+✔ replication requires an enrolled node/key binding, caps leases and audits each plaintext export (48.404833ms)
+✔ delta sync sends only changed records, imports signed read logs exactly once, and survives a lost response (197.939375ms)
+✔ node log forgery, key substitution, gaps and conflicting replays cannot commit or renew a lease (92.696583ms)
+✔ unowned UTF-8 assets deny all readers, and plaintext storage budgets are exact (13.344583ms)
+✔ read index changes, replacement with a later event, and damaged signed payloads fail closed (23.331167ms)
+✔ signed persisted checkpoints verify only the suffix on cold start and reject signature/truncation attacks (108.778291ms)
+✔ replica restart retains the merged delta state and uploaded-log cursor but never restores a lease (123.272375ms)
+✔ old authority tables upgrade without replacing keys, file ciphertext or signed history (16.911042ms)
+✔ independent millisecond clock anchors merge forward without weakening explicit rollback checks (45.088209ms)
+✔ a stolen replicator credential without the node private key cannot export, and captured sync requests cannot be replayed (36.002334ms)
+✔ revoke reports when it holds on every replica, including outstanding leases (25.6215ms)
+✔ rotation, role changes and ownership transfers also report when they hold on every replica (41.339792ms)
+✔ one admin cannot satisfy two-person recovery with custodians it enrolled, and cannot remove the last admin (54.497375ms)
+✔ independent replica cache verifies signature, node binding, fresh challenge and chain continuity (112.920291ms)
+✔ delayed grants cannot extend leases; partitions, monotonic rollback and restart fail closed (105.334333ms)
+✔ replica-role credentials cannot perform administrative mutations (22.764625ms)
+REPLICA_MEASUREMENT {"nodes":5,"independent_databases":5,"lease_ms":3000,"injected_sync_delays_ms":[50,150,300],"partitions":2,"p50_ms":339,"max_ms":2945,"observations":[{"node":0,"partitioned":false,"observed_ms":91,"reason":"UNAUTHORIZED"},{"node":1,"partitioned":false,"observed_ms":185,"reason":"UNAUTHORIZED"},{"node":2,"partitioned":false,"observed_ms":339,"reason":"UNAUTHORIZED"},{"node":3,"partitioned":true,"observed_ms":2921,"reason":"LEASE_EXPIRED"},{"node":4,"partitioned":true,"observed_ms":2945,"reason":"LEASE_EXPIRED"}],"measurement":"Single-observer monotonic elapsed time after revocation acknowledgement, 20ms polling; separate OS processes and encrypted caches; sync transport delayed/withheld by harness, not a physical WAN benchmark. Five samples only."}
+✔ five independent processes enforce revocation with delayed sync and two partitions (3857.23171ms)
+✔ worker scenarios reset atomically; expected errors use JSON exit zero and omit SQLite noise (998.527ms)
+✔ forged requests cannot consume audit capacity; revocation and raising budget work at the soft limit (232.58275ms)
+✔ status verifies only the signed suffix after its cached checkpoint; full exported history still verifies (461.653208ms)
+✔ temporary wall-clock jumps do not poison an already running authority's monotonic time (208.842125ms)
+✔ protected-read replay storage expires at a documented finite window (7.777208ms)
+✔ per-recipient offer quotas leave capacity for other actors (22.532917ms)
+✔ partial transfers survive receiver rotation during grace and fail exactly at cutoff (41.749333ms)
+✔ signed ingestion persists and evaluates more than ten thousand real observations (1069.748333ms)
+✔ SQLite notice filtering preserves unrelated runtime warnings (16.256458ms)
+✔ worker reads and audits fail closed in the contract shape on any error (232.495667ms)
+✔ revoked key use is rejected, alerted with identity + key, and bounded per actor (708.603708ms)
+✔ signed replay is alerted; forged signatures record nothing identity-bearing (239.019542ms)
+✔ replica records post-signature failures locally and uploads them as alerts (289.53475ms)
+ℹ tests 104
 ℹ suites 0
-ℹ pass 90
+ℹ pass 104
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 9751.631088
+ℹ duration_ms 10696.223755
 PASS: Node v24.11.1 / OpenSSL 3.5.4; 225 independent NIST/Wycheproof ML-DSA-65 verification vectors (82 valid, 143 invalid), including native context handling and canonical key/length validation.
 
 HELD-OUT DETECTOR (reference and evaluation windows are disjoint)
@@ -143,7 +158,7 @@ HELD-OUT DETECTOR (reference and evaluation windows are disjoint)
   "reference_events": 4000,
   "heldout_events": 12000,
   "baseline_commitment": "b88d6d98f531500386aafd1ef4d92e986fef7c30c936749f9c26799d0964dbda075e5c7ed02136c86e792c07bf11731e",
-  "elapsed_ms": 179,
+  "elapsed_ms": 276,
   "metrics": {
     "unit": "event",
     "tp": 1080,
@@ -198,7 +213,7 @@ HELD-OUT DETECTOR (reference and evaluation windows are disjoint)
     "false_alerted_events_per_1000_benign": 0,
     "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
   },
-  "elapsed_ms": 177,
+  "elapsed_ms": 328,
   "protocol": "Separate implementation, LCG random source, mesh/hub topology, outcome synonyms, distinct sessions, 5-minute slow hops and 8-minute two-hop paths. Frozen disjoint reference. Labels never enter detection. Unknown benign two-edge fan-out and isolated malicious access are explicit ambiguity cases; no threshold fitting.",
   "timing": {
     "offset_ms": [
@@ -221,17 +236,17 @@ CRYPTO + TRANSACTION PERFORMANCE
   "units": "milliseconds",
   "measurements": {
     "read": {
-      "median": 2.6260624999999997,
-      "p95": 5.661709,
-      "max": 6.877792
+      "median": 3.919937,
+      "p95": 9.41275,
+      "max": 14.836708
     },
     "protected_read": {
-      "median": 3.4048745,
-      "p95": 8.86875,
-      "max": 12.949125
+      "median": 2.3202914999999997,
+      "p95": 6.31725,
+      "max": 7.260166
     }
   },
-  "max_rss_kib": 59628,
+  "max_rss_kib": 55624,
   "scope": "Single-process, signed-command core including signature verification, crypto, SQLite commit and signed audit; excludes HTTP/process startup. Local filesystem/cache conditions apply."
 }
 

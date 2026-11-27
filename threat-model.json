@@ -8,5 +8,8 @@
   "replica_audit": "Signed local reads are uploaded and acknowledged on sync; partitions delay visibility.",
   "clock_assumption": "Monotonic node clock progresses through suspension; lease bound L/(1-rho).",
   "revocation_everywhere": "Revoke, rotate, role change, transfer and recovery return effective_everywhere_at_ms = latest pre-revocation lease expiry (rho = 1%); replicas may serve the revoked key until then, the authority never does.",
-  "at_rest": "Master key is beside the database; protects database-only disclosure, not whole-directory theft."
+  "at_rest": "Master key is beside the database; protects database-only disclosure, not whole-directory theft.",
+  "log_integrity": "Signed SHA-384 chain plus RFC 9162 Merkle tree; audit answers carry inclusion proofs; tree heads signed with ML-DSA-65 and SLH-DSA-SHA2-128s; CWE-117 prevented by per-record canonical JSON.",
+  "self_detection": "Post-signature attacks (revoked/expired key, disabled actor, stale epoch, signed replay) become bounded signed security.alert events naming identity, key, node and event; response revokes the actor's dashboard tokens and pending offers. Pre-signature rejections are only counted.",
+  "messaging_limits": "Hybrid X25519 + ML-KEM-768 one-time offers per message; no Double Ratchet/PQXDH post-compromise healing; no session resumption."
 }

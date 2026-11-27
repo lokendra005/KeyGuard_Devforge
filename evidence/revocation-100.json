@@ -4,10 +4,10 @@
   "observations": 500,
   "sync_interval_ms": 1000,
   "lease_ms": 3000,
-  "p50_ms": 530,
-  "p95_ms": 1044,
-  "p99_ms": 1104,
-  "max_ms": 1117,
-  "max_reported_replica_grace_ms": 3013,
+  "p50_ms": 487,
+  "p95_ms": 1051,
+  "p99_ms": 1117,
+  "max_ms": 1168,
+  "max_reported_replica_grace_ms": 3016,
   "method": "Monotonic ms from authority revoke ack to first rejection, per node, of a request signed with the revoked key and its pre-revocation epoch; 2 ms polling; in-process transport with 0-50 ms injected delay; no partitions (partitioned nodes fail closed at lease expiry, measured separately)."
 }
