@@ -17,7 +17,6 @@ class Graph {
         rows: new Map(),
         pending: new Set(),
         score: 0,
-        successes: 0,
         at: 0,
       };
       this.nodes.set(vertex, n);
@@ -48,7 +47,6 @@ class Graph {
       for (const [k, r] of b.rows) a.rows.set(k, r);
       for (const r of b.pending) a.pending.add(r);
       a.score += b.score;
-      a.successes += b.successes;
       // A bridge between already reported components creates a new combined incident.
       if (b.alert) {
         a.alert = undefined;
@@ -60,13 +58,11 @@ class Graph {
     const old = a.rows.get(key);
     if (old) {
       a.score -= 2 ** (-(now - old.corrected_ms) / this.halfLife);
-      a.successes -= Number(old.event.outcome === "success");
       a.pending.delete(old);
     }
     a.rows.set(key, row);
     a.pending.add(row);
     a.score += 1;
-    a.successes += Number(e.outcome === "success");
     return a;
   }
   add(row) {
@@ -101,4 +97,45 @@ class Graph {
     return this.insert(key, row);
   }
 }
-module.exports = { Graph };
+// A -> B -> C requires two successful, temporally ordered edges, not two spokes.
+function pivots(rows, window) {
+  const eligible = rows.filter(
+    (r) =>
+      r.event.outcome === "success" &&
+      !r.uncertain &&
+      r.event.source_service !== r.event.target_service,
+  );
+  const ended = [...eligible].sort((a, b) => a.latest_ms - b.latest_ms);
+  const incoming = new Map(),
+    witnesses = new Map();
+  let next = 0;
+  for (const row of [...eligible].sort(
+    (a, b) => a.earliest_ms - b.earliest_ms,
+  )) {
+    while (next < ended.length && ended[next].latest_ms < row.earliest_ms) {
+      const prior = ended[next++],
+        e = prior.event;
+      const key = C.canonical([e.actor, e.target_service]);
+      const best = incoming.get(key) || [];
+      // Only one origin is forbidden by a query; the newest two distinct origins suffice.
+      const choices = [...best, prior].sort(
+        (a, b) => b.corrected_ms - a.corrected_ms,
+      );
+      const distinct = choices.filter(
+        (r, i) =>
+          choices.findIndex(
+            (p) => p.event.source_service === r.event.source_service,
+          ) === i,
+      );
+      incoming.set(key, distinct.slice(0, 2));
+    }
+    const e = row.event;
+    const prior = (
+      incoming.get(C.canonical([e.actor, e.source_service])) || []
+    ).find((r) => r.event.source_service !== e.target_service);
+    if (prior && row.corrected_ms - prior.corrected_ms <= window)
+      witnesses.set(e.event_id, [prior, row]);
+  }
+  return witnesses;
+}
+module.exports = { Graph, pivots };

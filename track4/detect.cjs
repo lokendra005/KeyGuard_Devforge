@@ -342,6 +342,8 @@ function detect(events, approvals, config = {}) {
     roleGrants = new Map(),
     revoked = new Map(),
     groups = new Map(),
+    familiarRoutes = new Map(),
+    movementRows = [],
     alerts = [];
   function alert(rule, rows, explanation, scoreMilli) {
     const support = [...new Set(rows.map((r) => r.event.event_id))];
@@ -394,7 +396,7 @@ function detect(events, approvals, config = {}) {
   }
   for (const row of observations) {
     const e = row.event,
-      session = e.actor;
+      actor = e.actor;
     const successful = e.outcome === "success";
     if (row.uncertain) row.labels.push("timing_uncertain");
     if (row.out_of_order) row.labels.push("delayed_delivery");
@@ -433,7 +435,7 @@ function detect(events, approvals, config = {}) {
         row.earliest_ms >= time(a.effective_at_utc);
       if ((scoped(a, row, true) || approvedRemoval) && !row.uncertain) {
         row.labels.push("approved_change");
-        suspiciousChanges.delete(session);
+        suspiciousChanges.delete(actor);
         if (!approvedRemoval)
           roleGrants.set(C.canonical([e.actor, e.role_after]), {
             at: row.earliest_ms,
@@ -441,7 +443,7 @@ function detect(events, approvals, config = {}) {
           });
       } else {
         row.labels.push("unexpected_role_change");
-        suspiciousChanges.set(session, row);
+        suspiciousChanges.set(actor, row);
         alert(
           "unexpected_role_change",
           [row],
@@ -451,7 +453,7 @@ function detect(events, approvals, config = {}) {
       continue;
     }
     if (!["success", "failure"].includes(e.outcome)) continue;
-    const previous = suspiciousChanges.get(session);
+    const previous = suspiciousChanges.get(actor);
     if (
       successful &&
       previous &&
@@ -510,7 +512,13 @@ function detect(events, approvals, config = {}) {
           ),
         ),
       );
-    if (known || (successful && scoped(a, row) && !row.uncertain)) continue;
+    const route = C.canonical([e.actor, e.source_service, e.target_service]);
+    if (known) {
+      if (successful && !row.uncertain && !row.alerts.length)
+        familiarRoutes.set(route, row);
+      continue;
+    }
+    if (successful && scoped(a, row) && !row.uncertain) continue;
     row.labels.push("novel_service_path");
     if (successful && config.alert_on_novel === true)
       alert(
@@ -519,24 +527,30 @@ function detect(events, approvals, config = {}) {
         "Explicit strict-baseline policy: this successful service edge is absent from the frozen baseline.",
       );
     if (e.source_service === e.target_service) continue;
-    let graphs = groups.get(session);
-    if (!graphs) {
-      const { Graph } = require("./lateral.cjs");
-      graphs = {
-        all: new Graph(window, halfLife),
-        success: new Graph(window, halfLife),
-      };
-      groups.set(session, graphs);
+    const familiar = familiarRoutes.get(route);
+    if (
+      familiar &&
+      !row.uncertain &&
+      familiar.latest_ms < row.earliest_ms &&
+      row.corrected_ms - familiar.corrected_ms <= window
+    ) {
+      row.labels.push("familiar_actor_path");
+      row.route_context_event_id = familiar.event.event_id;
+      continue;
     }
-    const component = graphs.all.add(row);
-    const succeeded = successful ? graphs.success.add(row) : undefined;
+    movementRows.push(row);
+  }
+  const { Graph, pivots } = require("./lateral.cjs");
+  const witnesses = pivots(movementRows, window);
+  for (const row of movementRows) {
+    const actor = row.event.actor;
+    if (!groups.has(actor)) groups.set(actor, new Graph(window, halfLife));
+    const component = groups.get(actor).add(row);
     const scoreMilli = Math.floor(1000 * component.score + 1e-8);
     const qualifying =
       component.rows.size >= minEdges && scoreMilli >= minScore
         ? component
-        : succeeded?.rows.size >= 2
-          ? succeeded
-          : undefined;
+        : undefined;
     if (qualifying) {
       const pending = [...qualifying.pending];
       qualifying.pending.clear();
@@ -548,7 +562,7 @@ function detect(events, approvals, config = {}) {
         qualifying.alert = alert(
           "lateral_movement_candidate",
           rows,
-          "Actor-wide connected unusual service edges across sessions. Two successful connected hops suffice; mixed attempts require the configured edge count and decayed score. Evidence grows within an incident; detected_at_ms is its first signal.",
+          "Actor-wide connected unusual service edges across sessions satisfy the configured distinct-edge count and decayed score. Evidence grows within an incident; detected_at_ms is its first signal.",
           Math.floor(qualifying.score * 1000 + 1e-8),
         );
         qualifying.evidenceIDs = new Set(qualifying.alert.events);
@@ -585,12 +599,22 @@ function detect(events, approvals, config = {}) {
         }
         result.decayed_score_milli = Math.floor(qualifying.score * 1000 + 1e-8);
       }
+    } else if (witnesses.has(row.event.event_id)) {
+      const pair = witnesses.get(row.event.event_id);
+      for (const r of pair)
+        if (!r.labels.includes("lateral_movement_candidate"))
+          r.labels.push("lateral_movement_candidate");
+      alert(
+        "lateral_movement_candidate",
+        pair,
+        "Two successful unusual hops A -> B -> C visit three distinct services within the window. The first hop's latest possible time precedes the second hop's earliest possible time; session IDs need not match.",
+      );
     }
   }
   for (const row of observations)
     if (!row.labels.length) row.labels.push("routine");
   return {
-    version: 2,
+    version: 3,
     config_commitment: C.digest(config),
     approvals_commitment: C.digest(approvals),
     baseline: baseline
