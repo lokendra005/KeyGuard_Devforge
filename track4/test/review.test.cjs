@@ -319,8 +319,8 @@ test("worker reads and audits fail closed in the contract shape on any error", (
   A.equal(conflict.decision, "deny");
   A.equal(conflict.body, undefined);
   A.equal(run({ op: "read", actor: "u", asset: "a", request_id: 7 }).decision, "deny");
-  const { inclusion, ...audited } = run({ op: "audit", request_id: "r1" });
-  A.deepEqual(audited, { decision: "allow", request_id: "r1" });
+  A.deepEqual(run({ op: "audit", request_id: "r1" }), { decision: "allow", request_id: "r1" });
+  const { inclusion } = run({ op: "audit", request_id: "r1", proof: true });
   A.ok(Array.isArray(inclusion.proof) && inclusion.leaf_index < inclusion.tree_size);
   const unknown = run({ op: "audit", request_id: "never" });
   A.equal(unknown.decision, "deny");

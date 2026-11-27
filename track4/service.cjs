@@ -378,7 +378,11 @@ function executeTransaction(store, input, options = {}) {
       return {
         request_id: row.id,
         decision: row.decision,
-        ...(row.event_seq ? { inclusion: store.inclusion(row.event_seq) } : {}),
+        // ponytail: the proof rebuilds the tree (O(events)); signed audits include it, the local
+        // worker only on request ({"proof": true}) so its audit stays as fast as a read.
+        ...(row.event_seq && (!auth.trusted || request.proof === true)
+          ? { inclusion: store.inclusion(row.event_seq) }
+          : {}),
       };
     }
     if (op === "revoke") {
