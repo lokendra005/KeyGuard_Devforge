@@ -95,15 +95,25 @@ function sync(store, request, auth, now) {
   const uploaded = verifyEvidence(log, binding.node_public_key, prefix);
   for (const event of log.events) {
     const p = event.payload;
-    C.check(
-      p.node === binding.node_id &&
-        ["read", "protected_read"].includes(p.action) &&
-        ["allow", "deny"].includes(p.detail.decision),
-      "INVALID_REPLICA_LOG",
-    );
     C.text(p.actor);
-    C.text(p.detail.asset);
-    if (p.action === "read") C.text(p.detail.request_id);
+    if (p.action === "security.alert") {
+      C.check(
+        p.node === binding.node_id &&
+          p.detail.service === binding.node_id &&
+          ["revoked_key_use", "disabled_actor_use", "stale_epoch_use", "expired_key_use", "signed_replay"].includes(p.detail.rule),
+        "INVALID_REPLICA_LOG",
+      );
+      C.text(p.detail.reason, 64);
+    } else {
+      C.check(
+        p.node === binding.node_id &&
+          ["read", "protected_read"].includes(p.action) &&
+          ["allow", "deny"].includes(p.detail.decision),
+        "INVALID_REPLICA_LOG",
+      );
+      C.text(p.detail.asset);
+      if (p.action === "read") C.text(p.detail.request_id);
+    }
     const old = db
       .prepare("SELECT body FROM replica_events WHERE node_id=? AND seq=?")
       .get(binding.node_id, event.seq);
@@ -219,6 +229,7 @@ function observations(store) {
   return store.db
     .prepare("SELECT * FROM replica_events ORDER BY received_ms,node_id,seq")
     .all()
+    .filter((row) => C.parse(row.body).payload.action !== "security.alert")
     .map((row) => {
       const e = C.parse(row.body),
         p = e.payload;

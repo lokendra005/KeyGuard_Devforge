@@ -307,18 +307,24 @@ class Replica {
       this.authTime,
       Math.floor(this.grant.body.issued_ms + this.lastMono - this.start),
     );
-    const auth = verifyCommand(
-      envelope,
-      {
-        authority: this.trust.authority,
-        audience: this.node,
-        policy: this.policy(),
-        actor: this.actors.get(envelope.actor),
-        key: this.keys.get(envelope.key_id),
-      },
-      now,
-      options.bootstrap,
-    );
+    let auth;
+    try {
+      auth = verifyCommand(
+        envelope,
+        {
+          authority: this.trust.authority,
+          audience: this.node,
+          policy: this.policy(),
+          actor: this.actors.get(envelope.actor),
+          key: this.keys.get(envelope.key_id),
+        },
+        now,
+        options.bootstrap,
+      );
+    } catch (e) {
+      this.alert(now, envelope, e);
+      throw e;
+    }
     const body = auth.body;
     this.db.exec("BEGIN IMMEDIATE");
     let committed = false;
@@ -329,10 +335,11 @@ class Replica {
         auth.key_id,
         envelope.nonce,
       ]);
-      C.check(
-        !this.db.prepare("SELECT id FROM nonces WHERE id=?").get(nonce),
-        "REPLAY",
-      );
+      if (this.db.prepare("SELECT id FROM nonces WHERE id=?").get(nonce)) {
+        const e = new C.Fault("REPLAY");
+        Object.assign(e, { verifiedActor: auth.actor, verifiedKey: auth.key_id, rule: "signed_replay" });
+        throw e;
+      }
       this.db
         .prepare("INSERT INTO nonces VALUES(?,?)")
         .run(nonce, envelope.expires);
@@ -410,7 +417,35 @@ class Replica {
       return result;
     } catch (e) {
       if (!committed) this.db.exec("ROLLBACK");
+      if (e.rule === "signed_replay") this.alert(now, envelope, e);
       throw e;
+    }
+  }
+  // Post-signature rejections become local signed "security.alert" events, uploaded on the next sync.
+  // ponytail: in-memory per-actor/minute cap (20), resets on restart; persist it if replicas restart often.
+  alert(now, envelope, e) {
+    if (!e.verifiedActor || !e.rule) return;
+    const minute = Math.floor(now / 60000),
+      key = e.verifiedActor;
+    this.alertCounts ||= new Map();
+    const c = this.alertCounts.get(key);
+    const n = c?.minute === minute ? c.n : 0;
+    this.alertCounts.set(key, { minute, n: n + 1 });
+    if (n >= 20) return;
+    try {
+      this.db.exec("BEGIN IMMEDIATE");
+      this.record(now, key, "security.alert", {
+        rule: e.rule,
+        key_id: e.verifiedKey || null,
+        service: this.node,
+        op: typeof envelope?.body?.op === "string" ? envelope.body.op.slice(0, 64) : null,
+        reason: e.code,
+      });
+      this.db.exec("COMMIT");
+    } catch {
+      try {
+        this.db.exec("ROLLBACK");
+      } catch {}
     }
   }
   close() {
