@@ -23,7 +23,7 @@ The root adapter accepts one JSON request and returns one JSON response per proc
 
 ## Packaged offline runtime
 
-Download `keyguard-reviewer.tar.gz` and `REVIEWER-SHA256SUMS` from the [review-v3 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v3). Verify the archive, extract into an empty directory, then:
+Download `keyguard-reviewer.tar.gz` and `REVIEWER-SHA256SUMS` from the [review-v4 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v4). Verify the archive, extract into an empty directory, then:
 
 ```sh
 sha256sum -c SHA256SUMS
@@ -43,4 +43,4 @@ The [two-page brief](KeyGuard-brief.pdf) contains architecture, threat model and
 
 Session resumption is deliberately unsupported, and the isolated-access detector blind spot is measured. Synthetic metrics, public-validator results and local tests are not hidden-worker scores or security certification. Authenticate release checksums through an independent channel; replacing an archive and its checksum together defeats checksums alone.
 
-Streaming walkthrough: [Google Drive video](https://drive.google.com/file/d/12ctCr6DAvSzDgRySdrr2QayL8FVswcMR/view). Anyone with the link can view; file discovery is disabled. The GitHub release also retains the downloadable MP4.
+Earlier review-v3 walkthrough (its detector results predate the precision update): [Google Drive video](https://drive.google.com/file/d/12ctCr6DAvSzDgRySdrr2QayL8FVswcMR/view). Anyone with the link can view; file discovery is disabled. The review-v3 release retains that downloadable MP4. Current detector measurements and the rebuilt runtime bundle are in review-v4.

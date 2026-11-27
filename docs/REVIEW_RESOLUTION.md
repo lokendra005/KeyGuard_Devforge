@@ -41,3 +41,7 @@ The supplied review was used as an adversarial checklist. Changes were made in t
 - Unowned assets use NULL ownership and deny access. Plaintext UTF-8 bytes determine storage usage.
 - Persisted signed verification checkpoints accelerate cold startup; complete evidence verification and independent rollback anchors remain available. Read indexes bind their original signed event, including a signature that prevents substitution with a later event.
 - Migration/restart tests preserve authority keys, ciphertext and event history; node caches merge deltas across restart but never restore leases.
+
+## Precision follow-up: detector report v3
+
+Two successful edges now need a directed, interval-ordered three-service pivot to invoke the two-hop shortcut. Three-edge undirected fan-out keeps its existing score/count thresholds. Trusted prior baseline successes establish window-bounded familiarity for the same actor and route; this affects movement evidence only, never authorization or independent role/revocation findings. The sweep index is checked against exhaustive search. Both holdout generators remain byte-identical to review-v3, and 20 comparisons preserve all previously detected attack events while reducing false positives. Full mathematics, measurements and ambiguity limits are in [DETECTOR_PRECISION.md](DETECTOR_PRECISION.md).

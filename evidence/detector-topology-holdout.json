@@ -15,17 +15,17 @@
   "metrics": {
     "unit": "event",
     "tp": 1300,
-    "fp": 200,
+    "fp": 0,
     "fn": 100,
-    "tn": 11600,
-    "precision": 0.8666666666666667,
+    "tn": 11800,
+    "precision": 1,
     "recall": 0.9285714285714286,
-    "f1": 0.896551724137931,
+    "f1": 0.9629629629629629,
     "median_alert_latency_ms": 98295.5,
-    "false_alerted_events_per_1000_benign": 16.949152542372882,
+    "false_alerted_events_per_1000_benign": 0,
     "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
   },
-  "elapsed_ms": 122,
+  "elapsed_ms": 120,
   "protocol": "Separate implementation, LCG random source, mesh/hub topology, outcome synonyms, distinct sessions, 5-minute slow hops and 8-minute two-hop paths. Frozen disjoint reference. Labels never enter detection. Unknown benign two-edge fan-out and isolated malicious access are explicit ambiguity cases; no threshold fitting.",
   "timing": {
     "offset_ms": [

@@ -1,0 +1,639 @@
+{
+  "algorithm": "Directed interval-ordered two-hop witnesses plus actor-specific familiarity certified only by prior trusted-baseline success; unchanged graph window, decay and thresholds.",
+  "generators_unchanged": true,
+  "before_source_sha256": {
+    "track4/detect.cjs": "d02687e6099b3a47a5c1bb65599d616eb02e9b5de978c86f44a710fe466bb223",
+    "track4/lateral.cjs": "0bd275ab119eb51a38099dceaa6c56e024be5bafe41583f970b2fac3f4fdc0ac",
+    "track4/test/detector-benchmark.cjs": "46641e946e4861fa3cb233266463e566f6aa9eb931947107a76b432dca02bfd2",
+    "track4/test/detector-topology-benchmark.cjs": "3b5f56a357e7bdf917c12b7eb362b6adf9d1ad2b179732a96c548ac9451bd90f"
+  },
+  "source_sha256": {
+    "track4/detect.cjs": "5dd6ea5be30026af433c2bdfa1a507fb5716b9f45f6eaf502c92bd4e0fe4305d",
+    "track4/lateral.cjs": "fa364cfb6504b7ffdd8c040739c9bf340c617f7aca3994149f418ea780e447a7",
+    "track4/test/detector-benchmark.cjs": "46641e946e4861fa3cb233266463e566f6aa9eb931947107a76b432dca02bfd2",
+    "track4/test/detector-topology-benchmark.cjs": "3b5f56a357e7bdf917c12b7eb362b6adf9d1ad2b179732a96c548ac9451bd90f"
+  },
+  "comparisons": [
+    {
+      "generator": "original",
+      "seed": 20261127,
+      "before": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 720,
+        "fn": 0,
+        "tn": 10200,
+        "precision": 0.6,
+        "recall": 1,
+        "f1": 0.75,
+        "median_alert_latency_ms": 82019,
+        "false_alerted_events_per_1000_benign": 65.93406593406593,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 240,
+        "fn": 0,
+        "tn": 10680,
+        "precision": 0.8181818181818182,
+        "recall": 1,
+        "f1": 0.9,
+        "median_alert_latency_ms": 83651.5,
+        "false_alerted_events_per_1000_benign": 21.978021978021978,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "original",
+      "seed": 987654321,
+      "before": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 720,
+        "fn": 0,
+        "tn": 10200,
+        "precision": 0.6,
+        "recall": 1,
+        "f1": 0.75,
+        "median_alert_latency_ms": 81016.5,
+        "false_alerted_events_per_1000_benign": 65.93406593406593,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 240,
+        "fn": 0,
+        "tn": 10680,
+        "precision": 0.8181818181818182,
+        "recall": 1,
+        "f1": 0.9,
+        "median_alert_latency_ms": 83361.5,
+        "false_alerted_events_per_1000_benign": 21.978021978021978,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "original",
+      "seed": 1,
+      "before": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 720,
+        "fn": 0,
+        "tn": 10200,
+        "precision": 0.6,
+        "recall": 1,
+        "f1": 0.75,
+        "median_alert_latency_ms": 82390,
+        "false_alerted_events_per_1000_benign": 65.93406593406593,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 240,
+        "fn": 0,
+        "tn": 10680,
+        "precision": 0.8181818181818182,
+        "recall": 1,
+        "f1": 0.9,
+        "median_alert_latency_ms": 84173,
+        "false_alerted_events_per_1000_benign": 21.978021978021978,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "original",
+      "seed": 17,
+      "before": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 720,
+        "fn": 0,
+        "tn": 10200,
+        "precision": 0.6,
+        "recall": 1,
+        "f1": 0.75,
+        "median_alert_latency_ms": 82705.5,
+        "false_alerted_events_per_1000_benign": 65.93406593406593,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 240,
+        "fn": 0,
+        "tn": 10680,
+        "precision": 0.8181818181818182,
+        "recall": 1,
+        "f1": 0.9,
+        "median_alert_latency_ms": 85350.5,
+        "false_alerted_events_per_1000_benign": 21.978021978021978,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "original",
+      "seed": 89,
+      "before": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 720,
+        "fn": 0,
+        "tn": 10200,
+        "precision": 0.6,
+        "recall": 1,
+        "f1": 0.75,
+        "median_alert_latency_ms": 80711.5,
+        "false_alerted_events_per_1000_benign": 65.93406593406593,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 240,
+        "fn": 0,
+        "tn": 10680,
+        "precision": 0.8181818181818182,
+        "recall": 1,
+        "f1": 0.9,
+        "median_alert_latency_ms": 82053,
+        "false_alerted_events_per_1000_benign": 21.978021978021978,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "original",
+      "seed": 613,
+      "before": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 720,
+        "fn": 0,
+        "tn": 10200,
+        "precision": 0.6,
+        "recall": 1,
+        "f1": 0.75,
+        "median_alert_latency_ms": 76264.5,
+        "false_alerted_events_per_1000_benign": 65.93406593406593,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 240,
+        "fn": 0,
+        "tn": 10680,
+        "precision": 0.8181818181818182,
+        "recall": 1,
+        "f1": 0.9,
+        "median_alert_latency_ms": 78357,
+        "false_alerted_events_per_1000_benign": 21.978021978021978,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "original",
+      "seed": 2027,
+      "before": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 720,
+        "fn": 0,
+        "tn": 10200,
+        "precision": 0.6,
+        "recall": 1,
+        "f1": 0.75,
+        "median_alert_latency_ms": 80034.5,
+        "false_alerted_events_per_1000_benign": 65.93406593406593,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 240,
+        "fn": 0,
+        "tn": 10680,
+        "precision": 0.8181818181818182,
+        "recall": 1,
+        "f1": 0.9,
+        "median_alert_latency_ms": 81072.5,
+        "false_alerted_events_per_1000_benign": 21.978021978021978,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "original",
+      "seed": 65537,
+      "before": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 720,
+        "fn": 0,
+        "tn": 10200,
+        "precision": 0.6,
+        "recall": 1,
+        "f1": 0.75,
+        "median_alert_latency_ms": 77725.5,
+        "false_alerted_events_per_1000_benign": 65.93406593406593,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 240,
+        "fn": 0,
+        "tn": 10680,
+        "precision": 0.8181818181818182,
+        "recall": 1,
+        "f1": 0.9,
+        "median_alert_latency_ms": 78870,
+        "false_alerted_events_per_1000_benign": 21.978021978021978,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "original",
+      "seed": 314159,
+      "before": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 720,
+        "fn": 0,
+        "tn": 10200,
+        "precision": 0.6,
+        "recall": 1,
+        "f1": 0.75,
+        "median_alert_latency_ms": 81129.5,
+        "false_alerted_events_per_1000_benign": 65.93406593406593,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 240,
+        "fn": 0,
+        "tn": 10680,
+        "precision": 0.8181818181818182,
+        "recall": 1,
+        "f1": 0.9,
+        "median_alert_latency_ms": 82976,
+        "false_alerted_events_per_1000_benign": 21.978021978021978,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "original",
+      "seed": 2147483647,
+      "before": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 720,
+        "fn": 0,
+        "tn": 10200,
+        "precision": 0.6,
+        "recall": 1,
+        "f1": 0.75,
+        "median_alert_latency_ms": 80482.5,
+        "false_alerted_events_per_1000_benign": 65.93406593406593,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1080,
+        "fp": 240,
+        "fn": 0,
+        "tn": 10680,
+        "precision": 0.8181818181818182,
+        "recall": 1,
+        "f1": 0.9,
+        "median_alert_latency_ms": 82282,
+        "false_alerted_events_per_1000_benign": 21.978021978021978,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "independent_topology",
+      "seed": 314159,
+      "before": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 200,
+        "fn": 100,
+        "tn": 11600,
+        "precision": 0.8666666666666667,
+        "recall": 0.9285714285714286,
+        "f1": 0.896551724137931,
+        "median_alert_latency_ms": 98295.5,
+        "false_alerted_events_per_1000_benign": 16.949152542372882,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 0,
+        "fn": 100,
+        "tn": 11800,
+        "precision": 1,
+        "recall": 0.9285714285714286,
+        "f1": 0.9629629629629629,
+        "median_alert_latency_ms": 98295.5,
+        "false_alerted_events_per_1000_benign": 0,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "independent_topology",
+      "seed": 1,
+      "before": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 200,
+        "fn": 100,
+        "tn": 11600,
+        "precision": 0.8666666666666667,
+        "recall": 0.9285714285714286,
+        "f1": 0.896551724137931,
+        "median_alert_latency_ms": 101084,
+        "false_alerted_events_per_1000_benign": 16.949152542372882,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 0,
+        "fn": 100,
+        "tn": 11800,
+        "precision": 1,
+        "recall": 0.9285714285714286,
+        "f1": 0.9629629629629629,
+        "median_alert_latency_ms": 101084,
+        "false_alerted_events_per_1000_benign": 0,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "independent_topology",
+      "seed": 17,
+      "before": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 200,
+        "fn": 100,
+        "tn": 11600,
+        "precision": 0.8666666666666667,
+        "recall": 0.9285714285714286,
+        "f1": 0.896551724137931,
+        "median_alert_latency_ms": 99761.5,
+        "false_alerted_events_per_1000_benign": 16.949152542372882,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 0,
+        "fn": 100,
+        "tn": 11800,
+        "precision": 1,
+        "recall": 0.9285714285714286,
+        "f1": 0.9629629629629629,
+        "median_alert_latency_ms": 99761.5,
+        "false_alerted_events_per_1000_benign": 0,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "independent_topology",
+      "seed": 89,
+      "before": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 200,
+        "fn": 100,
+        "tn": 11600,
+        "precision": 0.8666666666666667,
+        "recall": 0.9285714285714286,
+        "f1": 0.896551724137931,
+        "median_alert_latency_ms": 100678,
+        "false_alerted_events_per_1000_benign": 16.949152542372882,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 0,
+        "fn": 100,
+        "tn": 11800,
+        "precision": 1,
+        "recall": 0.9285714285714286,
+        "f1": 0.9629629629629629,
+        "median_alert_latency_ms": 100678,
+        "false_alerted_events_per_1000_benign": 0,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "independent_topology",
+      "seed": 613,
+      "before": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 200,
+        "fn": 100,
+        "tn": 11600,
+        "precision": 0.8666666666666667,
+        "recall": 0.9285714285714286,
+        "f1": 0.896551724137931,
+        "median_alert_latency_ms": 99531,
+        "false_alerted_events_per_1000_benign": 16.949152542372882,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 0,
+        "fn": 100,
+        "tn": 11800,
+        "precision": 1,
+        "recall": 0.9285714285714286,
+        "f1": 0.9629629629629629,
+        "median_alert_latency_ms": 99531,
+        "false_alerted_events_per_1000_benign": 0,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "independent_topology",
+      "seed": 2027,
+      "before": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 200,
+        "fn": 100,
+        "tn": 11600,
+        "precision": 0.8666666666666667,
+        "recall": 0.9285714285714286,
+        "f1": 0.896551724137931,
+        "median_alert_latency_ms": 101530,
+        "false_alerted_events_per_1000_benign": 16.949152542372882,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 0,
+        "fn": 100,
+        "tn": 11800,
+        "precision": 1,
+        "recall": 0.9285714285714286,
+        "f1": 0.9629629629629629,
+        "median_alert_latency_ms": 101530,
+        "false_alerted_events_per_1000_benign": 0,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "independent_topology",
+      "seed": 65537,
+      "before": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 200,
+        "fn": 100,
+        "tn": 11600,
+        "precision": 0.8666666666666667,
+        "recall": 0.9285714285714286,
+        "f1": 0.896551724137931,
+        "median_alert_latency_ms": 103248,
+        "false_alerted_events_per_1000_benign": 16.949152542372882,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 0,
+        "fn": 100,
+        "tn": 11800,
+        "precision": 1,
+        "recall": 0.9285714285714286,
+        "f1": 0.9629629629629629,
+        "median_alert_latency_ms": 103248,
+        "false_alerted_events_per_1000_benign": 0,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "independent_topology",
+      "seed": 20261127,
+      "before": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 200,
+        "fn": 100,
+        "tn": 11600,
+        "precision": 0.8666666666666667,
+        "recall": 0.9285714285714286,
+        "f1": 0.896551724137931,
+        "median_alert_latency_ms": 102666,
+        "false_alerted_events_per_1000_benign": 16.949152542372882,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 0,
+        "fn": 100,
+        "tn": 11800,
+        "precision": 1,
+        "recall": 0.9285714285714286,
+        "f1": 0.9629629629629629,
+        "median_alert_latency_ms": 102666,
+        "false_alerted_events_per_1000_benign": 0,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "independent_topology",
+      "seed": 987654321,
+      "before": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 200,
+        "fn": 100,
+        "tn": 11600,
+        "precision": 0.8666666666666667,
+        "recall": 0.9285714285714286,
+        "f1": 0.896551724137931,
+        "median_alert_latency_ms": 101236,
+        "false_alerted_events_per_1000_benign": 16.949152542372882,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 0,
+        "fn": 100,
+        "tn": 11800,
+        "precision": 1,
+        "recall": 0.9285714285714286,
+        "f1": 0.9629629629629629,
+        "median_alert_latency_ms": 101236,
+        "false_alerted_events_per_1000_benign": 0,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    },
+    {
+      "generator": "independent_topology",
+      "seed": 2147483647,
+      "before": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 200,
+        "fn": 100,
+        "tn": 11600,
+        "precision": 0.8666666666666667,
+        "recall": 0.9285714285714286,
+        "f1": 0.896551724137931,
+        "median_alert_latency_ms": 102345,
+        "false_alerted_events_per_1000_benign": 16.949152542372882,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "after": {
+        "unit": "event",
+        "tp": 1300,
+        "fp": 0,
+        "fn": 100,
+        "tn": 11800,
+        "precision": 1,
+        "recall": 0.9285714285714286,
+        "f1": 0.9629629629629629,
+        "median_alert_latency_ms": 102345,
+        "false_alerted_events_per_1000_benign": 0,
+        "limitation": "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency."
+      },
+      "previously_detected_attack_events_lost": []
+    }
+  ],
+  "limitations": "Synthetic event labels are used only for evaluation. Zero observed lost positives does not prove universal recall preservation. Three-edge ambiguous fan-out remains alertable; two-edge spokes and temporally ambiguous pivots no longer invoke the two-hop shortcut."
+}

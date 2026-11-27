@@ -8,6 +8,7 @@ These are actual captured outputs, not mocked verdicts. Test identities, files a
 | `official-validator.log`, `official-linux.log` | Unmodified public validator, pinned toolkit commit `8901dfb`; latter uses a fresh network-disabled Linux container per request. |
 | `pqcrypto-interop.log`, `pqcrypto-linux.log` | Independent Python pqcrypto 0.4.0 decapsulation/HMAC oracle, 16 generated keypairs. |
 | `detector-holdout.json`, `detector-renamed-holdout.json` | Disjoint 4k reference / 12k held-out synthetic evaluations, two seeds, renamed services/roles/actions and honest confusion matrices. |
+| `detector-precision-validation.json` | Old/new comparison on ten seeds per unchanged generator; source hashes, full metrics and lost-positive checks. |
 | `detector-topology-holdout.json` | Independently written mesh/hub builder: slow chains, fan-out, session hopping and two-hop paths; 3,600 reference / 13,200 held-out events. |
 | `tls.log` | Actual TLS 1.3 trust and refusal checks. |
 | `docker-build.log`, `deployment-image.log` | Root source-only Docker build and tests from copied image content, without source bind mounts. |
@@ -16,10 +17,10 @@ These are actual captured outputs, not mocked verdicts. Test identities, files a
 | `legacy-preservation.log` | Source relocation and existing key-file hash checks; no live migration. |
 | `walkthrough.log` | Actual process-per-request adapter operations shown in the video. |
 | `streaming-video.json` | Unlisted Drive viewer permissions and observed browser playback. |
-| `video-validation.json` | Actual video/audio stream check and 300-second duration. |
+| `video-validation.json` | Historical review-v3 video/audio check and 300-second duration; that walkthrough predates the precision update. |
 
 `./scripts/collect-evidence.sh --docker` regenerates the local evidence with the bundled runtime images. Set `TOOLKIT_DIR=/path/to/Track-4-Toolkit` and `PYTHON=/path/to/python3.12` to include the organizer/oracle checks; pqcrypto must already be available. No toolkit source or evaluation labels are built into the adapter.
 
-`source-sha256.json` binds the application/tests/scripts/configuration used by these runs. Final extracted-archive and public-release checks are separate release assets to avoid a self-referential archive checksum. `scripts/build-deliverables.py --video` regenerates the PDF/video from these logs using optional reportlab, pypdf, Pillow, ffmpeg and local macOS system narration; those tools are not runtime/test dependencies.
+`source-sha256.json` binds the current application/tests/scripts/configuration. Review-v4 freshly collects both full offline demos, both holdouts, the 20-run detector comparison, host organizer/oracle checks and the source-built deployment image. The separate final archive logs recheck the organizer/oracle through offline Linux containers. `tls.log`, `deployment-cluster.log`, `clock-concurrency-amd64.log`, `legacy-preservation.log`, `official-linux.log`, `pqcrypto-linux.log`, `walkthrough.log` and video checks are retained review-v3 evidence for unchanged mechanisms or the explicitly historical walkthrough. Final extracted-archive and public-release checks are separate release assets to avoid a self-referential archive checksum. `scripts/build-deliverables.py --video` regenerates the PDF/video from these logs using optional reportlab, pypdf, Pillow, ffmpeg and local macOS system narration; those tools are not runtime/test dependencies.
 
 Five-node latency uses one observer clock after authoritative revocation acknowledgement. It includes polling/scheduling delay and injected transport faults, with only five samples per architecture. The guarantee is about authorization/response queueing under the documented clock assumption, not a guarantee on receipt of buffered bytes. Synthetic detector scores are not production accuracy. The video is clearly labelled a narrated recorded-evidence walkthrough, not a real-time screen recording.

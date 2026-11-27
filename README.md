@@ -4,7 +4,7 @@ Post-quantum protected files, recoverable identities and encrypted delivery for 
 
 **No API key, hosted service, model or npm installation is required.** Runtime decisions use ownership, live identity/key state, signed commands and cryptographic verification. Example names and baseline data are configuration, never expected-answer branches.
 
-- [Two-page brief](docs/KeyGuard-brief.pdf) · [Stream the five-minute video](https://drive.google.com/file/d/12ctCr6DAvSzDgRySdrr2QayL8FVswcMR/view) · [Download fallback](https://github.com/lokendra005/KeyGuard_Devforge/releases/download/review-v3/keyguard-demo.mp4)
+- [Two-page brief](docs/KeyGuard-brief.pdf) · [Earlier walkthrough (review-v3; previous detector results)](https://drive.google.com/file/d/12ctCr6DAvSzDgRySdrr2QayL8FVswcMR/view) · [Download earlier walkthrough](https://github.com/lokendra005/KeyGuard_Devforge/releases/download/review-v3/keyguard-demo.mp4)
 - [Architecture, algorithms and conditional security arguments](docs/TRACK4_DESIGN.md)
 - [Operator runbook](docs/TRACK4_OPERATIONS.md) · [Reviewer instructions](docs/SUBMISSION.md)
 - [Committed test evidence](evidence/README.md) · [Security review resolution](docs/REVIEW_RESOLUTION.md)
@@ -56,7 +56,7 @@ Example IDs/content are editable. Private keys stay outside Git and outside the 
 | Protected read | ML-KEM-768 plus exact organizer HMAC-SHA-256 challenge/content proof |
 | Identity commands | ML-DSA-65, canonical JSON v2, destination audience + epoch + nonce + expiry |
 | Rotation grace | Configurable 0-60 seconds; partial transfers continue only while both peer keys remain valid |
-| Independent-node revocation | Lease default 5 seconds; conditional authorization bound `L/(1-rho)` for monotonic clock drift bound `rho`; five-node ARM64 sample L=3000 ms: median 337 ms, max of 5 samples 3000 ms (includes polling) |
+| Independent-node revocation | Lease default 5 seconds; conditional authorization bound `L/(1-rho)` for monotonic clock drift bound `rho`; five-node ARM64 sample L=3000 ms: median 323 ms, max of 5 samples 2979 ms (includes polling) |
 | Audit | Signed SHA-384 chain; external rollback checkpoint; first correlation decision retained; suffix verification for status |
 | Detector | Frozen reference, configurable outcome synonyms, role/approval/revocation rules and actor-wide undirected components; 30-minute window / 10-minute half-life; no ML |
 | Timing envelope | Default +/-300-second measured offset; 120-second lateness; raw timestamps and uncertainty retained |
@@ -66,19 +66,19 @@ Two generators are implemented separately and use disjoint reference/evaluation 
 | Synthetic evaluation | Original holdout | Independent topology holdout |
 |---|---:|---:|
 | Reference / evaluated events | 4,000 / 12,000 | 3,600 / 13,200 |
-| TP / FP / FN / TN | 1,080 / 720 / 0 / 10,200 | 1,300 / 200 / 100 / 11,600 |
-| F1 | **0.7500** | **0.8966** |
-| Precision / recall | 0.6000 / 1.0000 | 0.8667 / 0.9286 |
-| Median receipt-derived alert delay | 82,019 ms | 98,295.5 ms |
-| False-alerted events per 1,000 benign | 65.93 | 16.95 |
+| TP / FP / FN / TN | 1,080 / 240 / 0 / 10,680 | 1,300 / 0 / 100 / 11,800 |
+| F1 | **0.9000** | **0.9630** |
+| Precision / recall | 0.8182 / 1.0000 | 1.0000 / 0.9286 |
+| Median receipt-derived alert delay | 83,651.5 ms | 98,295.5 ms |
+| False-alerted events per 1,000 benign | 21.98 | 0 |
 
-The requested actor-wide fan-out/two-hop sensitivity improves recall but reduces precision on the original holdout (previous F1 0.9412, now 0.7500). Unknown benign two-edge activity can look identical to an attack; the second holdout also retains 100 isolated-attack misses. These are event-level synthetic results, not production accuracy. Alert latency includes up to 120 seconds of collection delay.
+The precision update separates ordered two-hop pivots from two spokes and distinguishes familiar routes from role violations, without changing thresholds or either generator. Compared with review-v3, false positives fall from 720 to 240 on the original holdout and from 200 to 0 on the topology holdout. All previously detected attack events remain detected across ten seeds per generator; the topology holdout still has 100 isolated-attack misses. Unknown benign three-edge fan-out remains ambiguous and alertable. These are synthetic results, not production accuracy. [Algorithm, correctness argument, regression oracle and limitations](docs/DETECTOR_PRECISION.md).
 
 ## Containers and offline review
 
 `docker build -t keyguard-track4 .` works from a clean clone; it does not require prebuilt files in `dist/`. The exact base digest is pinned. `compose.yaml` supplies the authoritative TLS API; `compose.replicas.yaml` adds separately mounted read nodes. See the runbook for certificates, origins, credentials and state ownership.
 
-The [review-v3 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v3) includes a checksummed reviewer bundle with both runtime images. Extract it, run `sha256sum -c SHA256SUMS`, then `./scripts/demo.sh --docker`. Tests run unprivileged with networking disabled, a read-only root/source and temporary writable state. Committed logs remain available without downloading that bundle. `scripts/collect-evidence.sh` regenerates them.
+The [review-v4 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v4) includes a checksummed reviewer bundle with both runtime images. Extract it, run `sha256sum -c SHA256SUMS`, then `./scripts/demo.sh --docker`. Tests run unprivileged with networking disabled, a read-only root/source and temporary writable state. Committed logs remain available without downloading that bundle. `scripts/collect-evidence.sh` regenerates them.
 
 ## Security boundaries
 

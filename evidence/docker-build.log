@@ -8,11 +8,11 @@
 #2 DONE 0.0s
 
 #3 [internal] load build context
-#3 transferring context: 142.36kB done
+#3 transferring context: 51.84kB done
 #3 DONE 0.0s
 
 #4 [1/4] FROM docker.io/library/node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57
-#4 resolve docker.io/library/node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57 0.0s done
+#4 resolve docker.io/library/node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57 done
 #4 DONE 0.0s
 
 #5 [2/4] WORKDIR /app
@@ -26,10 +26,10 @@
 
 #8 exporting to image
 #8 exporting layers 0.0s done
-#8 exporting manifest sha256:cb9e28fed3c2d31b40d1d71bffdca3d41e9a2b71ca8b2dca2f5c17e2e463f8ed done
-#8 exporting config sha256:b3e1fdf7918128bae8449b0e03c0c4dec5954858bbd8de9ede0df082886ed7cb done
-#8 exporting attestation manifest sha256:eb8167995911905b94c74df038732b3e421b61a98abfd818ab6fb67b1df74162 done
-#8 exporting manifest list sha256:5412c63d6e1e1a6fb0cca1b4116ac3f776870574c0b4c5adcca2df668e05e8f5 done
+#8 exporting manifest sha256:4732f25ad537ac4f5c333eded877ebdf8e98152b06d65f9cfe56ddec72379048 done
+#8 exporting config sha256:b9d5119dbd6d68e807821184ca8b54c12368082e1de80ad3f5d2f38280e918ff done
+#8 exporting attestation manifest sha256:3caa6e506978dfe8145a881062ade2aae015ac8b7f0ded9acd4fe5ec0927006d done
+#8 exporting manifest list sha256:ebf64dba9682ac15d46dec50f35f66785bee7363ebef37f9176b8c6615488539 done
 #8 naming to docker.io/library/keyguard-track4:review done
 #8 unpacking to docker.io/library/keyguard-track4:review 0.0s done
 #8 DONE 0.1s
