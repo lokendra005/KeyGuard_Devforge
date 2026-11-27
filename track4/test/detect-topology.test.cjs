@@ -55,12 +55,27 @@ test("outcome mappings cover synonyms and overrides; exact repeated input never 
   );
   const a = row("same", "a", "b"),
     b = { ...a, target_service: "different" };
-  for (const fn of [() => detect([a, b]), () => D.learn([a, b])])
+  for (const fn of [
+    () => detect([a, b], { strict_input: true }),
+    () => D.learn([a, b], { strict_input: true }),
+  ])
     A.throws(
       fn,
       (e) =>
         e.code === "DUPLICATE_EVENT" && e.label === "conflicting_duplicate",
     );
+  // Default: the first copy is analysed and the conflicting copy is quarantined, not fatal.
+  const report = detect([a, b]);
+  A.equal(report.counts.events, 1);
+  A.equal(report.events[0].event.target_service, "b");
+  A.deepEqual(
+    report.rejected.map((r) => [r.event_id, r.reason]),
+    [["same", "conflicting_duplicate"]],
+  );
+  A.deepEqual(
+    D.learn([a, b]).rejected.map((r) => r.reason),
+    ["conflicting_duplicate"],
+  );
 });
 test("actor-wide undirected components catch fan-out, reversed edges, slow chains and two successful hops", () => {
   for (const edges of [
@@ -91,10 +106,26 @@ test("actor-wide undirected components catch fan-out, reversed edges, slow chain
     detect([row("a", "a", "b"), row("b", "c", "d", 1000)]).alerts.length,
     0,
   );
+  // A different identity leaving B is not the same actor's chain, but it is credential hopping.
+  const hop = detect([
+    row("a", "a", "b"),
+    { ...row("b", "b", "c", 1000), actor: "different" },
+  ]).alerts;
+  A.deepEqual(
+    hop.map((a) => [a.rule, a.identities]),
+    [["cross_identity_lateral_candidate", ["one-actor", "different"]]],
+  );
+  A.equal(
+    detect(
+      [row("a", "a", "b"), { ...row("b", "b", "c", 1000), actor: "different" }],
+      { cross_identity_window_ms: 0 },
+    ).alerts.length,
+    0,
+  );
   A.equal(
     detect([
       row("a", "a", "b"),
-      { ...row("b", "b", "c", 1000), actor: "different" },
+      { ...row("b", "b", "c", 300001), actor: "different" },
     ]).alerts.length,
     0,
   );

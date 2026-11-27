@@ -34,7 +34,9 @@ class Graph {
     component.score *= 2 ** (-(now - component.at) / this.halfLife);
     component.at = now;
   }
-  insert(key, row) {
+  // Incident state lives on rows (row.incident) so a rebuild after expiry or a merge of
+  // components extends the existing alert instead of opening a new one per event.
+  insert(key, row, rebuilding = false) {
     const now = row.corrected_ms,
       e = row.event;
     let a = this.root(e.source_service),
@@ -47,10 +49,12 @@ class Graph {
       for (const [k, r] of b.rows) a.rows.set(k, r);
       for (const r of b.pending) a.pending.add(r);
       a.score += b.score;
-      // A bridge between already reported components creates a new combined incident.
-      if (b.alert) {
-        a.alert = undefined;
-        for (const r of a.rows.values()) a.pending.add(r);
+      // A bridge into a reported component joins that incident; unreported rows become its new evidence.
+      if (b.alert && b.alert !== a.alert) {
+        const absorbed = a.alert ? b.rows.values() : a.rows.values();
+        a.alert ??= b.alert;
+        if (!rebuilding)
+          for (const r of absorbed) if (r.incident !== a.alert) a.pending.add(r);
       }
       b.rows.clear();
       b.pending.clear();
@@ -61,13 +65,14 @@ class Graph {
       a.pending.delete(old);
     }
     a.rows.set(key, row);
-    a.pending.add(row);
+    if (row.incident) a.alert ??= row.incident;
+    if (!(rebuilding && row.incident)) a.pending.add(row);
     a.score += 1;
     return a;
   }
   add(row) {
     const now = row.corrected_ms;
-    let expired = false;
+    let expired = 0;
     while (
       this.head < this.queue.length &&
       now - this.queue[this.head].row.corrected_ms > this.window
@@ -75,15 +80,23 @@ class Graph {
       const { key, row: r } = this.queue[this.head++];
       if (this.edges.get(key) === r) {
         this.edges.delete(key);
-        expired = true;
+        expired++;
       }
     }
-    if (expired) {
+    this.stale = (this.stale || 0) + expired;
+    // ponytail: exact rebuild per expiry is O(live edges). Above 512 live edges per actor (already a
+    // large incident) rebuild once stale edges reach 1/8 of live ones, so components may briefly keep
+    // up to 12.5% expired edges; an exact decremental-connectivity structure is the upgrade path.
+    if (
+      this.stale &&
+      (this.edges.size < 512 || this.stale * 8 >= this.edges.size)
+    ) {
+      this.stale = 0;
       this.nodes.clear();
       for (const [key, r] of [...this.edges].sort(
         (a, b) => a[1].corrected_ms - b[1].corrected_ms,
       ))
-        this.insert(key, r);
+        this.insert(key, r, true);
     }
     if (this.head > 4096 && this.head > this.queue.length / 2) {
       this.queue = this.queue.slice(this.head);
@@ -98,16 +111,34 @@ class Graph {
   }
 }
 // A -> B -> C requires two successful, temporally ordered edges, not two spokes.
-function pivots(rows, window) {
+// Rows lacking only a receipt time qualify; contradictory timing never does.
+// Cross-identity: hop 2 leaves B under a different identity within crossWindow (credential hopping).
+function pivots(rows, window, crossWindow = 0) {
   const eligible = rows.filter(
     (r) =>
       r.event.outcome === "success" &&
-      !r.uncertain &&
+      (!r.uncertain || r.receipt_missing_only === true) &&
       r.event.source_service !== r.event.target_service,
   );
   const ended = [...eligible].sort((a, b) => a.latest_ms - b.latest_ms);
   const incoming = new Map(),
-    witnesses = new Map();
+    arrivals = new Map(),
+    witnesses = new Map(),
+    cross = new Map();
+  // Keep the newest two candidates that differ in `field`; one may be excluded by the query.
+  const keep = (map, key, prior, field) => {
+    const choices = [...(map.get(key) || []), prior].sort(
+      (a, b) => b.corrected_ms - a.corrected_ms,
+    );
+    map.set(
+      key,
+      choices
+        .filter(
+          (r, i) => choices.findIndex((p) => field(p) === field(r)) === i,
+        )
+        .slice(0, 2),
+    );
+  };
   let next = 0;
   for (const row of [...eligible].sort(
     (a, b) => a.earliest_ms - b.earliest_ms,
@@ -115,19 +146,8 @@ function pivots(rows, window) {
     while (next < ended.length && ended[next].latest_ms < row.earliest_ms) {
       const prior = ended[next++],
         e = prior.event;
-      const key = C.canonical([e.actor, e.target_service]);
-      const best = incoming.get(key) || [];
-      // Only one origin is forbidden by a query; the newest two distinct origins suffice.
-      const choices = [...best, prior].sort(
-        (a, b) => b.corrected_ms - a.corrected_ms,
-      );
-      const distinct = choices.filter(
-        (r, i) =>
-          choices.findIndex(
-            (p) => p.event.source_service === r.event.source_service,
-          ) === i,
-      );
-      incoming.set(key, distinct.slice(0, 2));
+      keep(incoming, C.canonical([e.actor, e.target_service]), prior, (r) => r.event.source_service);
+      if (crossWindow) keep(arrivals, e.target_service, prior, (r) => r.event.actor);
     }
     const e = row.event;
     const prior = (
@@ -135,7 +155,16 @@ function pivots(rows, window) {
     ).find((r) => r.event.source_service !== e.target_service);
     if (prior && row.corrected_ms - prior.corrected_ms <= window)
       witnesses.set(e.event_id, [prior, row]);
+    else if (crossWindow) {
+      const other = (arrivals.get(e.source_service) || []).find(
+        (r) =>
+          r.event.actor !== e.actor &&
+          r.event.source_service !== e.target_service &&
+          row.corrected_ms - r.corrected_ms <= crossWindow,
+      );
+      if (other) cross.set(e.event_id, [other, row]);
+    }
   }
-  return witnesses;
+  return { witnesses, cross };
 }
 module.exports = { Graph, pivots };

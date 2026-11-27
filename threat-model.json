@@ -2,10 +2,11 @@
   "asset": "protected-resource",
   "boundary": "identity-check",
   "trusted_plaintext_access": [
-    "Bound replicator credentials can export all resource plaintext; every sync export is audited.",
+    "Replica sync exports plaintext only with both the replicator credential and the bound node private key (signed, counter-protected request); every export is audited.",
     "Admin credentials can acquire all resource plaintext through audited ownership changes; admin sync is forbidden."
   ],
   "replica_audit": "Signed local reads are uploaded and acknowledged on sync; partitions delay visibility.",
   "clock_assumption": "Monotonic node clock progresses through suspension; lease bound L/(1-rho).",
+  "revocation_everywhere": "Revoke returns effective_everywhere_at_ms = latest pre-revocation lease expiry (rho = 1%); replicas may serve the revoked key until then, the authority never does.",
   "at_rest": "Master key is beside the database; protects database-only disclosure, not whole-directory theft."
 }

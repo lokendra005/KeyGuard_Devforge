@@ -111,7 +111,16 @@ const DEFAULT_OUTCOMES = Object.freeze(
       "succeeded",
       "granted",
       "permit",
+      "permitted",
       "ok",
+      "completed",
+      "complete",
+      "authorized",
+      "authorised",
+      "approved",
+      "accepted",
+      "pass",
+      "passed",
     ].map((x) => [x, "success"]),
     ...[
       "deny",
@@ -121,23 +130,42 @@ const DEFAULT_OUTCOMES = Object.freeze(
       "blocked",
       "rejected",
       "error",
+      "fail",
+      "unauthorized",
+      "unauthorised",
+      "forbidden",
+      "declined",
+      "refused",
     ].map((x) => [x, "failure"]),
   ]),
 );
-function unique(events) {
+// Identical redelivery is dropped. A conflicting copy throws unless `rejected` is supplied;
+// then the first copy is analysed and later conflicting copies are quarantined.
+function unique(events, rejected) {
   const seen = new Map();
-  return events.filter((event) => {
-    C.object(event);
-    C.text(event.event_id);
-    const content = C.digest(event),
-      previous = seen.get(event.event_id);
+  return events.filter((event, index) => {
+    let content, id;
+    try {
+      C.object(event);
+      id = C.text(event.event_id);
+      content = C.digest(event);
+    } catch (error) {
+      if (!rejected) throw error;
+      rejected.push({ index, event_id: null, reason: error.code || "INVALID_EVENT" });
+      return false;
+    }
+    const previous = seen.get(id);
     if (previous !== undefined && previous !== content) {
+      if (rejected) {
+        rejected.push({ index, event_id: id, reason: "conflicting_duplicate" });
+        return false;
+      }
       const error = new C.Fault("DUPLICATE_EVENT");
       error.label = "conflicting_duplicate";
-      error.event_id = event.event_id;
+      error.event_id = id;
       throw error;
     }
-    seen.set(event.event_id, content);
+    seen.set(id, content);
     return previous === undefined;
   });
 }
@@ -196,6 +224,10 @@ function normalize(event, index, config) {
       corrected - uncertainty > received ||
       received - corrected - uncertainty > (config.max_lateness_ms ?? 120000) ||
       event.received_time_utc === undefined,
+    // Missing receipt time is weaker than contradictory timing: ordering can still be proven from event time.
+    receipt_missing_only:
+      event.received_time_utc === undefined &&
+      Math.abs(offset) <= (config.max_offset_ms ?? 300000),
     out_of_order: false,
     labels: [],
     alerts: [],
@@ -213,10 +245,18 @@ function learn(reference, options = {}) {
     roles = new Map();
   let start = Infinity,
     end = -Infinity;
-  reference = unique(reference);
+  const rejected = [];
+  reference = unique(reference, options.strict_input ? undefined : rejected);
   for (let i = 0; i < reference.length; i++) {
-    const r = normalize(reference[i], i, options),
-      e = r.event;
+    let r;
+    try {
+      r = normalize(reference[i], i, options);
+    } catch (error) {
+      if (options.strict_input) throw error;
+      rejected.push({ index: i, event_id: reference[i].event_id, reason: error.code || "INVALID_EVENT" });
+      continue;
+    }
+    const e = r.event;
     start = Math.min(start, r.corrected_ms);
     end = Math.max(end, r.corrected_ms);
     if (
@@ -247,6 +287,7 @@ function learn(reference, options = {}) {
     min_observations: minimum,
     actor_edges: paths(actors),
     role_edges: paths(roles),
+    ...(rejected.length ? { rejected } : {}),
   };
 }
 function detect(events, approvals, config = {}) {
@@ -292,19 +333,47 @@ function detect(events, approvals, config = {}) {
     Array.isArray(changes) && changes.length <= 100000,
     "INVALID_APPROVALS",
   );
+  const strict = config.strict_input === true;
   const changeMap = new Map(),
-    revokedRoles = new Map();
+    revokedRoles = new Map(),
+    rejected = [],
+    rejectedApprovals = [];
+  // A malformed or conflicting approval authorizes nothing; events citing it are treated as unapproved.
   for (const change of changes) {
-    C.object(change);
-    C.text(change.approval_id);
-    C.check(!changeMap.has(change.approval_id), "DUPLICATE_APPROVAL");
-    changeMap.set(change.approval_id, change);
-    if (change.operation === "revoke_role") {
-      const key = C.canonical([change.subject, change.role]);
-      const at = time(change.effective_at_utc);
-      const times = revokedRoles.get(key) || [];
-      times.push(at);
-      revokedRoles.set(key, times);
+    let id;
+    try {
+      C.object(change);
+      id = C.text(change.approval_id);
+      const previous = changeMap.get(id);
+      if (previous) {
+        C.check(!strict, "DUPLICATE_APPROVAL");
+        if (previous.digest !== C.digest(change)) {
+          changeMap.set(id, { approval_id: id, invalid: true, digest: previous.digest });
+          rejectedApprovals.push({ approval_id: id, reason: "conflicting_duplicate" });
+        }
+        continue;
+      }
+      const a = { ...change, digest: C.digest(change) };
+      if (a.operation === "grant_role") {
+        for (const f of ["subject", "role", "approved_by"]) C.text(a[f]);
+        a.from_ms = time(a.valid_from_utc);
+        a.until_ms = time(a.valid_until_utc);
+        if (a.scope !== undefined)
+          C.check(Array.isArray(a.scope) && a.scope.every((s) => typeof s === "string"), "INVALID_APPROVAL");
+      } else if (a.operation === "revoke_role") {
+        for (const f of ["subject", "role"]) C.text(a[f]);
+        a.effective_ms = time(a.effective_at_utc);
+        const key = C.canonical([a.subject, a.role]);
+        const times = revokedRoles.get(key) || [];
+        times.push(a.effective_ms);
+        revokedRoles.set(key, times);
+      }
+      changeMap.set(id, a);
+    } catch (error) {
+      if (strict) throw error;
+      if (id !== undefined && !changeMap.has(id))
+        changeMap.set(id, { approval_id: id, invalid: true });
+      rejectedApprovals.push({ approval_id: id ?? null, reason: error.code || "INVALID_APPROVAL" });
     }
   }
   for (const times of revokedRoles.values()) times.sort((a, b) => a - b);
@@ -319,15 +388,28 @@ function detect(events, approvals, config = {}) {
     }
     return lo ? times[lo - 1] : Infinity;
   }
-  const observations = unique(events).map((event, index) => {
-    const row = normalize(event, index, config);
-    if (baseline)
-      C.check(
-        row.corrected_ms > baseline.reference_end_ms,
-        "BASELINE_HOLDOUT_OVERLAP",
-      );
-    return row;
+  // One malformed, conflicting or baseline-overlapping record is quarantined, not fatal.
+  // Only a holdout that overlaps the baseline entirely is refused as label leakage.
+  const kept = unique(events, strict ? undefined : rejected);
+  let overlapping = 0;
+  const observations = [];
+  kept.forEach((event, index) => {
+    try {
+      const row = normalize(event, index, config);
+      if (baseline && row.corrected_ms <= baseline.reference_end_ms) {
+        overlapping++;
+        C.check(!strict, "BASELINE_HOLDOUT_OVERLAP");
+        rejected.push({ index, event_id: event.event_id, reason: "BASELINE_HOLDOUT_OVERLAP" });
+        return;
+      }
+      observations.push(row);
+    } catch (error) {
+      if (strict) throw error;
+      if (error.code !== "BASELINE_HOLDOUT_OVERLAP")
+        rejected.push({ index, event_id: event.event_id, reason: error.code || "INVALID_EVENT" });
+    }
   });
+  C.check(!overlapping || observations.length > 0, "BASELINE_HOLDOUT_OVERLAP");
   let watermark = -Infinity;
   for (const row of [...observations].sort(
     (a, b) => a.received_ms - b.received_ms || a.index - b.index,
@@ -351,6 +433,7 @@ function detect(events, approvals, config = {}) {
       id: C.digest([rule, support]),
       rule,
       identity: rows.at(-1).event.actor,
+      identities: [...new Set(rows.map((r) => r.event.actor))],
       services: [
         ...new Set(
           rows.flatMap((r) => [r.event.source_service, r.event.target_service]),
@@ -381,6 +464,7 @@ function detect(events, approvals, config = {}) {
     const e = row.event;
     return (
       a &&
+      !a.invalid &&
       a.operation === "grant_role" &&
       typeof a.approved_by === "string" &&
       a.approved_by.length > 0 &&
@@ -388,8 +472,8 @@ function detect(events, approvals, config = {}) {
       a.approved_by !== a.subject &&
       (!e.approved_by || e.approved_by !== e.actor) &&
       a.role === e.role_after &&
-      row.earliest_ms >= time(a.valid_from_utc) &&
-      row.latest_ms < time(a.valid_until_utc) &&
+      row.earliest_ms >= a.from_ms &&
+      row.latest_ms < a.until_ms &&
       (roleOnly ||
         (Array.isArray(a.scope) && a.scope.includes(e.target_service)))
     );
@@ -401,20 +485,36 @@ function detect(events, approvals, config = {}) {
     if (row.uncertain) row.labels.push("timing_uncertain");
     if (row.out_of_order) row.labels.push("delayed_delivery");
     if (row.offset_ms) row.labels.push("clock_corrected");
+    if (e.outcome === "unknown") row.labels.push("unknown_outcome");
+    // An administration event names its target in `subject`; without one, only an explicit
+    // identity_state_after describes the actor itself. Never revoke the operator by default.
+    const selfRevoked = ["revoked", "disabled"].includes(e.identity_state_after);
     const isRevocation =
-      ["revoked", "disabled"].includes(e.identity_state_after) ||
+      selfRevoked ||
       (
         config.revocation_actions || ["revoke", "revoke_key", "disable_user"]
       ).includes(e.action);
     if (successful && isRevocation) {
-      revoked.set(e.subject || e.actor, row);
-      row.labels.push("revocation_observed");
+      const target = e.subject || (selfRevoked ? e.actor : "");
+      if (target) revoked.set(target, row);
+      row.labels.push(target ? "revocation_observed" : "revocation_without_subject");
       continue;
+    }
+    const reinstated = ["active", "enabled"].includes(e.identity_state_after);
+    if (
+      successful &&
+      (reinstated ||
+        (
+          config.reinstate_actions || ["enable_user", "reinstate", "restore_user"]
+        ).includes(e.action))
+    ) {
+      const target = e.subject || (reinstated ? e.actor : "");
+      if (target && revoked.delete(target)) row.labels.push("reinstatement_observed");
     }
     const a = changeMap.get(e.approval_id);
     if (
       successful &&
-      ((a && a.approved_by === a.subject) ||
+      ((a && !a.invalid && a.approved_by && a.approved_by === a.subject) ||
         (e.approved_by && e.approved_by === e.actor))
     ) {
       row.labels.push("self_approval");
@@ -424,22 +524,24 @@ function detect(events, approvals, config = {}) {
         "The beneficiary approved their own successful change or access.",
       );
     }
-    if (successful && e.role_before !== e.role_after) {
+    // An unrecognized outcome on a role transition fails closed: it is evaluated as if it succeeded.
+    if ((successful || e.outcome === "unknown") && e.role_before !== e.role_after) {
       const approvedRemoval =
         a &&
+        !a.invalid &&
         a.operation === "revoke_role" &&
         a.subject === e.actor &&
         a.approved_by &&
         a.approved_by !== a.subject &&
         a.role === e.role_before &&
-        row.earliest_ms >= time(a.effective_at_utc);
+        row.earliest_ms >= a.effective_ms;
       if ((scoped(a, row, true) || approvedRemoval) && !row.uncertain) {
         row.labels.push("approved_change");
         suspiciousChanges.delete(actor);
         if (!approvedRemoval)
           roleGrants.set(C.canonical([e.actor, e.role_after]), {
             at: row.earliest_ms,
-            until: time(a.valid_until_utc),
+            until: a.until_ms,
           });
       } else {
         row.labels.push("unexpected_role_change");
@@ -476,7 +578,10 @@ function detect(events, approvals, config = {}) {
           revoked.get(e.actor).event.event_id,
       );
     }
-    if (successful && a && !scoped(a, row)) {
+    // The approver acting on an approval (approve/revoke administration) is not its beneficiary.
+    if (successful && a && !a.invalid && a.approved_by === e.actor && a.subject !== e.actor)
+      row.labels.push("approval_administration");
+    else if (successful && a && !scoped(a, row)) {
       row.labels.push("approval_scope_violation");
       alert(
         "approval_scope_violation",
@@ -489,7 +594,7 @@ function detect(events, approvals, config = {}) {
       grant = roleGrants.get(roleID);
     const regranted =
       (grant && grant.at > revokedAt && row.latest_ms < grant.until) ||
-      (scoped(a, row) && time(a.valid_from_utc) > revokedAt);
+      (scoped(a, row) && a.from_ms > revokedAt);
     if (successful && row.earliest_ms >= revokedAt && !regranted) {
       row.labels.push("access_after_role_revocation");
       alert(
@@ -541,7 +646,13 @@ function detect(events, approvals, config = {}) {
     movementRows.push(row);
   }
   const { Graph, pivots } = require("./lateral.cjs");
-  const witnesses = pivots(movementRows, window);
+  const crossWindow = C.integer(
+    config.cross_identity_window_ms ?? 300000,
+    0,
+    3600000,
+  );
+  const { witnesses, cross } = pivots(movementRows, window, crossWindow);
+  const crossIncidents = new Map();
   for (const row of movementRows) {
     const actor = row.event.actor;
     if (!groups.has(actor)) groups.set(actor, new Graph(window, halfLife));
@@ -559,35 +670,41 @@ function detect(events, approvals, config = {}) {
           r.labels.push("lateral_movement_candidate");
       if (!qualifying.alert) {
         const rows = [...qualifying.rows.values()];
-        qualifying.alert = alert(
+        const result = alert(
           "lateral_movement_candidate",
           rows,
           "Actor-wide connected unusual service edges across sessions satisfy the configured distinct-edge count and decayed score. Evidence grows within an incident; detected_at_ms is its first signal.",
-          Math.floor(qualifying.score * 1000 + 1e-8),
+          scoreMilli,
         );
-        qualifying.evidenceIDs = new Set(qualifying.alert.events);
-        qualifying.services = new Set(qualifying.alert.services);
-        qualifying.sessions = new Set(qualifying.alert.sessions);
+        qualifying.alert = {
+          result,
+          evidenceIDs: new Set(result.events),
+          services: new Set(result.services),
+          sessions: new Set(result.sessions),
+        };
+        for (const r of rows) r.incident = qualifying.alert;
       } else {
-        const result = qualifying.alert;
+        const incident = qualifying.alert,
+          result = incident.result;
         for (const r of pending) {
-          if (!qualifying.evidenceIDs.has(r.event.event_id)) {
+          r.incident = incident;
+          if (!incident.evidenceIDs.has(r.event.event_id)) {
             result.events.push(r.event.event_id);
-            qualifying.evidenceIDs.add(r.event.event_id);
+            incident.evidenceIDs.add(r.event.event_id);
           }
           for (const service of [
             r.event.source_service,
             r.event.target_service,
           ])
-            if (!qualifying.services.has(service)) {
-              qualifying.services.add(service);
+            if (!incident.services.has(service)) {
+              incident.services.add(service);
               result.services.push(service);
             }
           if (
             r.event.session_id &&
-            !qualifying.sessions.has(r.event.session_id)
+            !incident.sessions.has(r.event.session_id)
           ) {
-            qualifying.sessions.add(r.event.session_id);
+            incident.sessions.add(r.event.session_id);
             result.sessions.push(r.event.session_id);
           }
           if (!r.alerts.includes(result.id)) r.alerts.push(result.id);
@@ -597,7 +714,10 @@ function detect(events, approvals, config = {}) {
           );
           result.uncertain_order ||= r.uncertain || r.out_of_order;
         }
-        result.decayed_score_milli = Math.floor(qualifying.score * 1000 + 1e-8);
+        result.decayed_score_milli = Math.max(
+          result.decayed_score_milli,
+          scoreMilli,
+        );
       }
     } else if (witnesses.has(row.event.event_id)) {
       const pair = witnesses.get(row.event.event_id);
@@ -609,6 +729,38 @@ function detect(events, approvals, config = {}) {
         pair,
         "Two successful unusual hops A -> B -> C visit three distinct services within the window. The first hop's latest possible time precedes the second hop's earliest possible time; session IDs need not match.",
       );
+    } else if (cross.has(row.event.event_id)) {
+      const pair = cross.get(row.event.event_id);
+      for (const r of pair)
+        if (!r.labels.includes("lateral_movement_candidate"))
+          r.labels.push("lateral_movement_candidate");
+      // One incident per pivot service B while hops keep arriving within the cross window.
+      const pivot = row.event.source_service,
+        open = crossIncidents.get(pivot);
+      if (open && row.corrected_ms - open.at <= crossWindow) {
+        open.at = row.corrected_ms;
+        for (const r of pair) {
+          if (!open.result.events.includes(r.event.event_id))
+            open.result.events.push(r.event.event_id);
+          if (!open.result.identities.includes(r.event.actor))
+            open.result.identities.push(r.event.actor);
+          for (const service of [r.event.source_service, r.event.target_service])
+            if (!open.result.services.includes(service))
+              open.result.services.push(service);
+          if (!r.alerts.includes(open.result.id)) r.alerts.push(open.result.id);
+          r.first_alert_at_ms = Math.min(
+            r.first_alert_at_ms ?? Infinity,
+            Math.max(open.result.detected_at_ms, r.received_ms),
+          );
+        }
+        continue;
+      }
+      const result = alert(
+        "cross_identity_lateral_candidate",
+        pair,
+        "Two successful unusual hops A -> B -> C under different identities: an identity reaches B, then another identity leaves B for a third service within cross_identity_window_ms. Consistent with credential hopping; all identities are named.",
+      );
+      crossIncidents.set(pivot, { result, at: row.corrected_ms });
     }
   }
   for (const row of observations)
@@ -624,14 +776,20 @@ function detect(events, approvals, config = {}) {
           reference_end_ms: baseline.reference_end_ms,
         }
       : { source: "explicit operator policy" },
-    events: observations.map(({ index, ...row }) => row),
+    events: observations.map(({ index, incident, receipt_missing_only, ...row }) => row),
     alerts,
     counts: {
       events: observations.length,
       alerts: alerts.length,
       uncertain: observations.filter((r) => r.uncertain).length,
       out_of_order: observations.filter((r) => r.out_of_order).length,
+      unknown_outcome: observations.filter((r) => r.event.outcome === "unknown")
+        .length,
+      rejected: rejected.length,
+      rejected_approvals: rejectedApprovals.length,
     },
+    rejected,
+    rejected_approvals: rejectedApprovals,
     limits: {
       window_ms: window,
       half_life_ms: halfLife,
@@ -655,16 +813,25 @@ function score(report, labels, positiveLabels) {
   const truth = new Map(
     labels.map((x) => [x.event_id, positives.has(x.label)]),
   );
+  // Quarantined records are scored as not alerted, so rejecting input can never raise recall.
+  const quarantined = new Set(
+    (report.rejected || []).map((r) => r.event_id).filter((id) => id !== null),
+  );
+  for (const r of report.events) quarantined.delete(r.event.event_id);
   C.check(
     truth.size === labels.length &&
-      truth.size === report.events.length &&
-      report.events.every((r) => truth.has(r.event.event_id)),
+      truth.size === report.events.length + quarantined.size &&
+      report.events.every((r) => truth.has(r.event.event_id)) &&
+      [...quarantined].every((id) => truth.has(id)),
     "LABEL_MISMATCH",
   );
   let tp = 0,
     fp = 0,
     fn = 0,
     tn = 0;
+  for (const id of quarantined)
+    if (truth.get(id)) fn++;
+    else tn++;
   const delays = [];
   const byID = new Map(report.alerts.map((a) => [a.id, a]));
   for (const row of report.events) {

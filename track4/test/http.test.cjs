@@ -394,3 +394,38 @@ test("HTTP ingestion deduplicates exact retries and exposes a conflicting-duplic
       e.event_id === "duplicate",
   );
 });
+
+test(
+  "slow uploads from many source addresses cannot exhaust the body pool or block GETs",
+  { timeout: 12000, skip: process.platform !== "linux" && "needs Linux 127.0.0.0/8 source addresses" },
+  async (t) => {
+    const net = require("node:net"),
+      f = fixture(t),
+      api = server({ directory: f.directory });
+    await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+    const port = api.address().port,
+      sockets = [];
+    t.after(() => {
+      for (const s of sockets) s.destroy();
+      api.close();
+      api.closeAllConnections();
+    });
+    // 16 addresses x 4 slots = 64 held uploads: the old 32-slot global pool locked everyone out.
+    for (let ip = 0; ip < 16; ip++)
+      for (let j = 0; j < 4; j++) {
+        const s = net.createConnection({ host: "127.0.0.1", port, localAddress: "127.0.4." + (ip + 2) });
+        sockets.push(s);
+        s.on("error", () => {});
+        s.write(`POST /v1/command HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nContent-Length: 100000\r\n\r\n{`);
+      }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const url = "http://127.0.0.1:" + port;
+    A.equal((await fetch(url + "/v1/context")).status, 200);
+    const bypass = await fetch(url + "/v1/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    A.notEqual(bypass.status, 429);
+  },
+);

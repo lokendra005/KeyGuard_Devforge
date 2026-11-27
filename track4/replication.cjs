@@ -28,11 +28,28 @@ function sync(store, request, auth, now) {
       request.node_public_key === binding.node_public_key,
     "REPLICA_BINDING_MISMATCH",
   );
+  // The replicator credential alone is not enough: the bound node key must sign this exact request,
+  // with a counter above every counter already accepted for that key (replay of captured requests).
+  const { node_proof: proof, ...signed } = request;
+  C.check(
+    typeof proof === "string" &&
+      C.verify(binding.node_public_key, "KIG/replica-sync/v1", signed, proof),
+    "REPLICA_PROOF_REQUIRED",
+  );
+  const counter = C.integer(request.sync_counter, 1, Number.MAX_SAFE_INTEGER),
+    counterKey = "replica_sync_counter/" + C.digest(binding.node_public_key);
+  C.check(counter > (store.get(counterKey) || 0), "REPLAY");
+  store.set(counterKey, counter);
   C.text(request.nonce, 128);
   C.check(request.nonce.length >= 16, "INVALID_NONCE");
   const lease = Math.min(
     C.integer(request.lease_ms, 100, 60000),
     store.policy().max_lease_ms || 5000,
+  );
+  // Upper bound on when this grant stops authorizing, allowing 1% node clock-rate error (rho).
+  store.set(
+    "lease_horizon_ms",
+    Math.max(store.get("lease_horizon_ms") || 0, now + Math.ceil(lease / 0.99)),
   );
   if (request.prefix) {
     const p = request.prefix,

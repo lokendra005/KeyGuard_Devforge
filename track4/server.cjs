@@ -32,10 +32,15 @@ function server(options = {}) {
   ]);
   const rates = new Map(),
     active = new Map();
-  let inflight = 0;
+  // Slow uploads are bounded per peer (4), globally by count (512) and by buffered bytes (64 MiB),
+  // so exhausting the body pool needs 128+ source addresses; GETs never consume body slots.
+  let inflight = 0,
+    buffered = 0;
   const handler = async (req, res) => {
     req.socket.emit("kig-headers");
     let admitted = false,
+      uploading = false,
+      size = 0,
       bodyTimer;
     const peer = req.socket.remoteAddress;
     res.setHeader(
@@ -66,9 +71,7 @@ function server(options = {}) {
         "WRONG_ORIGIN",
       );
       C.check((active.get(peer) || 0) < 4, "BUSY");
-      C.check(inflight < 32, "BUSY");
       active.set(peer, (active.get(peer) || 0) + 1);
-      inflight++;
       admitted = true;
       const minute = Math.floor(Date.now() / 60000);
       for (const [key, bucket] of rates)
@@ -134,16 +137,20 @@ function server(options = {}) {
         ),
         "UNSUPPORTED_CONTENT_TYPE",
       );
+      C.check(inflight < 512, "BUSY");
+      inflight++;
+      uploading = true;
       bodyTimer = setTimeout(
         () => req.destroy(new C.Fault("BODY_TIMEOUT")),
         5000,
       );
       bodyTimer.unref();
       const chunks = [];
-      let size = 0;
       for await (const chunk of req) {
         size += chunk.length;
+        buffered += chunk.length;
         C.check(size <= 16 * 1024 * 1024, "INPUT_TOO_LARGE");
+        C.check(buffered <= 64 * 1024 * 1024, "BUSY");
         chunks.push(chunk);
       }
       clearTimeout(bodyTimer);
@@ -177,8 +184,9 @@ function server(options = {}) {
       } else res.end();
     } finally {
       clearTimeout(bodyTimer);
+      buffered -= size;
+      if (uploading) inflight--;
       if (admitted) {
-        inflight--;
         const count = active.get(peer) - 1;
         if (count) active.set(peer, count);
         else active.delete(peer);

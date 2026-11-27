@@ -160,7 +160,7 @@ test("CSV record boundaries and event identity cannot be injected or silently ov
       D.detect(
         [e, { ...e, outcome: "denied" }],
         { changes: [] },
-        { allowed_edges: [] },
+        { allowed_edges: [], strict_input: true },
       ),
     (e) => e.code === "DUPLICATE_EVENT" && e.label === "conflicting_duplicate",
   );

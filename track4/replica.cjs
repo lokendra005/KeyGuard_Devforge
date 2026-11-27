@@ -65,6 +65,7 @@ class Replica {
       );
     };
     this.audit = load("audit") || C.generate();
+    this.syncCounter = load("sync_counter") || 0;
     this.authTime = load("time") || 0;
     this.persist("audit", this.audit);
     this.ack = load("ack");
@@ -152,15 +153,22 @@ class Replica {
     };
     const uploaded = verifyEvidence(log, this.audit.public_key, prefix);
     this.pending = { nonce: C.random(), start: this.mono(), uploaded };
-    return {
+    // A persisted, strictly increasing counter signed by the node key proves possession of the
+    // node key and makes a captured request useless to a holder of only the replicator credential.
+    this.syncCounter++;
+    this.persist("sync_counter", this.syncCounter);
+    const request = {
       op: "replica.sync",
       node_id: this.node,
       nonce: this.pending.nonce,
       node_public_key: this.audit.public_key,
       lease_ms: this.leaseMS,
       read_log: log,
+      sync_counter: this.syncCounter,
       ...(this.anchor ? { prefix: structuredClone(this.anchor) } : {}),
     };
+    request.node_proof = C.sign(this.audit.private_key, "KIG/replica-sync/v1", request);
+    return request;
   }
   install(grant) {
     C.check(!this.closed, "CLOSED");

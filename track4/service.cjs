@@ -374,7 +374,15 @@ function executeTransaction(store, input, options = {}) {
         actor,
       );
       store.record(now, op, auth.actor, { target: actor });
-      return { revoked: true, effective_at_ms: now };
+      // Replicas holding a lease granted before this revoke may serve until it expires; report when
+      // the revocation holds on every node, so callers can wait instead of trusting the authority ack.
+      const grace = Math.max(0, (store.get("lease_horizon_ms") || 0) - now);
+      return {
+        revoked: true,
+        effective_at_ms: now,
+        effective_everywhere_at_ms: now + grace,
+        replica_grace_ms: grace,
+      };
     }
     if (op === "put") {
       const actor = C.text(request.actor);

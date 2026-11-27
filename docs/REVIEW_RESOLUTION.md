@@ -35,6 +35,7 @@ The supplied review was used as an adversarial checklist. Changes were made in t
 ## Follow-up review: protocol v2
 
 - Outcome synonym configuration, exact-event deduplication, conflicting-duplicate errors, actor-wide graphs, fan-out, slower windows and successful two-hop evidence are implemented in the shared detector. A separately written topology generator supplements the original unchanged holdout; both confusion matrices are published, including the increased false positives.
+- review-v5: sync requests must be signed by the bound node key with a monotonic counter (stolen replicator credential alone cannot export; captured requests cannot be replayed); revoke reports when it holds on every replica; the body pool is bounded per peer, globally (512 / 64 MiB) and GETs bypass it; the detector quarantines bad records, fails closed on unknown role-change outcomes, adds cross-identity pivots, scopes revocation to `subject`, keeps one incident per component across rebuilds, and passes the organizer practice set exactly.
 - Every sync is audited, requires a one-node/key-bound replicator and caps its lease. Admin sync is forbidden. Signed node read chains upload with retry-safe acknowledgements, are queryable by audit, and enter detection. Snapshots use verified full/delta mode and exact base checkpoints.
 - v2 signed audiences prevent authority/node and cross-node replay. Clients discover the target audience; old unsigned-audience envelopes fail closed.
 - Per-IP concurrency and five-second header/body deadlines are exercised with real trickling clients.

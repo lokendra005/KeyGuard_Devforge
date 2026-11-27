@@ -162,11 +162,17 @@ test("delta sync sends only changed records, imports signed read logs exactly on
 test("node log forgery, key substitution, gaps and conflicting replays cannot commit or renew a lease", (t) => {
   const f = fixture(t),
     a = node(f, t);
+  // These cases model a holder of the node key, so each altered request is re-signed.
+  const resign = (req) => {
+    const { node_proof, ...body } = req;
+    return { ...body, node_proof: C.sign(a.audit.private_key, "KIG/replica-sync/v1", body) };
+  };
   a.install(f.sync(a.beginSync()));
   a.execute(read(f, a));
   let req = a.beginSync();
   req.read_log.events[0].payload.detail.decision = "deny";
-  fails(() => f.sync(req), "BROKEN_LOG");
+  fails(() => f.sync(req), "REPLICA_PROOF_REQUIRED");
+  fails(() => f.sync(resign(req)), "BROKEN_LOG");
   A.equal(
     f.store.db.prepare("SELECT count(*) n FROM replica_events").get().n,
     0,
@@ -175,7 +181,7 @@ test("node log forgery, key substitution, gaps and conflicting replays cannot co
   a.install(good);
   req = a.beginSync();
   req.read_log.prefix.seq = 999;
-  fails(() => f.sync(req), "REPLICA_LOG_GAP");
+  fails(() => f.sync(resign(req)), "REPLICA_LOG_GAP");
   a.execute(read(f, a));
   req = a.beginSync();
   req.read_log.events[0].payload.node = "other";
@@ -185,7 +191,7 @@ test("node log forgery, key substitution, gaps and conflicting replays cannot co
     seq: e.seq,
     hash: e.hash,
   });
-  fails(() => f.sync(req), "INVALID_REPLICA_LOG");
+  fails(() => f.sync(resign(req)), "INVALID_REPLICA_LOG");
   A.equal(
     f.store.db.prepare("SELECT count(*) n FROM replica_events").get().n,
     1,
@@ -426,4 +432,32 @@ test("independent millisecond clock anchors merge forward without weakening expl
     () => S.execute(exact, { op: "status" }, { trusted: true }),
     "CLOCK_REGRESSION",
   );
+});
+test("a stolen replicator credential without the node private key cannot export, and captured sync requests cannot be replayed", (t) => {
+  const f = fixture(t),
+    a = node(f, t);
+  const first = a.beginSync();
+  a.install(f.sync(first));
+  const { node_proof, ...unsigned } = a.beginSync();
+  // Public values only: bound node id and public key, no node signature.
+  fails(() => f.sync(unsigned), "REPLICA_PROOF_REQUIRED");
+  fails(
+    () => f.sync({ ...unsigned, node_proof: C.sign(C.generate().private_key, "KIG/replica-sync/v1", unsigned) }),
+    "REPLICA_PROOF_REQUIRED",
+  );
+  // Re-wrapping a captured, validly signed request in a fresh replicator envelope is a replay.
+  fails(() => f.sync(first), "REPLAY");
+});
+test("revoke reports when it holds on every replica, including outstanding leases", (t) => {
+  const f = fixture(t),
+    a = node(f, t);
+  const solo = f.trusted({ op: "revoke", actor: f.actors.peer });
+  A.equal(solo.replica_grace_ms, 0);
+  A.equal(solo.effective_everywhere_at_ms, solo.effective_at_ms);
+  const grant = f.sync(a.beginSync());
+  a.install(grant);
+  const result = f.trusted({ op: "revoke", actor: f.actors.owner });
+  A.ok(result.replica_grace_ms >= grant.body.lease_ms);
+  A.ok(result.replica_grace_ms <= Math.ceil(grant.body.lease_ms / 0.99));
+  A.equal(result.effective_everywhere_at_ms, result.effective_at_ms + result.replica_grace_ms);
 });

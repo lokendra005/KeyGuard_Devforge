@@ -257,7 +257,7 @@ test("interval-sweep pivot index agrees with exhaustive witnesses under expiry, 
       !r.uncertain &&
       r.event.outcome === "success" &&
       r.event.source_service !== r.event.target_service;
-    const got = pivots(rows, 250);
+    const got = pivots(rows, 250).witnesses;
     for (const b of rows) {
       const expected =
         valid(b) &&

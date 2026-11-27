@@ -378,7 +378,12 @@ async function main(args = process.argv.slice(2)) {
 }
 if (require.main === module)
   main()
-    .then((result) => {
+    .then(async (result) => {
+      // A revoke is reported only once every replica lease that predates it has expired.
+      if (result?.revoked && result.replica_grace_ms > 0) {
+        await new Promise((resolve) => setTimeout(resolve, result.replica_grace_ms));
+        result.effective_everywhere = true;
+      }
       if (result !== undefined)
         process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     })
