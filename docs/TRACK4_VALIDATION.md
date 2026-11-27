@@ -1,6 +1,6 @@
 # Track 4 validation - 27 November 2026
 
-[Raw committed evidence](../evidence/README.md) and [review resolutions](REVIEW_RESOLUTION.md) provide reproducible checks. Results apply to the source manifest in `evidence/source-sha256.json`; final archive checks accompany the release separately.
+[Raw committed evidence](../evidence/README.md) provides reproducible checks. Results apply to the source manifest in `evidence/source-sha256.json`; final archive checks accompany the release separately.
 
 | Check | Observed outcome |
 |---|---|
