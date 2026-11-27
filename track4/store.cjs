@@ -20,6 +20,7 @@ try {
   process.emitWarning = emitWarning;
 }
 const C = require("./crypto.cjs");
+const M = require("./merkle.cjs");
 
 const TABLES = [
   "meta",
@@ -501,6 +502,55 @@ class Store {
         ),
       });
     return this.verifiedCheckpoint;
+  }
+  // ponytail: rebuilds the tree from every event hash per call, O(n); fine to ~100k events, persist interior nodes beyond that.
+  leaves() {
+    return this.db
+      .prepare("SELECT hash FROM events ORDER BY seq")
+      .all()
+      .map((r) => M.leafHash(r.hash));
+  }
+  inclusion(seq) {
+    const leaves = this.leaves();
+    return {
+      leaf_index: seq - 1,
+      tree_size: leaves.length,
+      root: M.root(leaves),
+      proof: M.inclusionProof(leaves, seq - 1),
+    };
+  }
+  // Sealed like the audit key; created on first use so stores made before this feature gain one.
+  slhKey() {
+    const aad = ["slh-key", this.get("authority")];
+    const sealed = this.get("slh_secret");
+    if (sealed) return C.parse(C.open(this.master, sealed, aad));
+    const pair = M.slhGenerate();
+    if (pair)
+      this.set("slh_secret", C.seal(this.master, Buffer.from(C.canonical(pair)), aad));
+    return pair;
+  }
+  slhPublicKey() {
+    const key = this.slhKey();
+    return key ? key.public_key : "unavailable";
+  }
+  treeHead() {
+    const leaves = this.leaves();
+    const body = {
+      authority: this.get("authority"),
+      tree_size: leaves.length,
+      root: M.root(leaves),
+    };
+    // One-entry cache: SLH-DSA-128s signing costs ~150ms.
+    if (this.cachedHead && C.digest(M.treeHeadBody(this.cachedHead)) === C.digest(body))
+      return this.cachedHead;
+    const key = this.slhKey();
+    const slh = key && M.slhSign(key.private_key, M.TREE_HEAD, body);
+    this.cachedHead = {
+      ...body,
+      signature: C.sign(this.audit.private_key, M.TREE_HEAD, body),
+      ...(slh ? { slh_signature: slh } : { slh_dsa: "unavailable" }),
+    };
+    return this.cachedHead;
   }
   file(row) {
     return C.open(this.master, C.parse(row.packet), [
