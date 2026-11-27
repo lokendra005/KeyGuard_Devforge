@@ -23,7 +23,7 @@ The root adapter accepts one JSON request and returns one JSON response per proc
 
 ## Packaged offline runtime
 
-Download `keyguard-reviewer.tar.gz` and `REVIEWER-SHA256SUMS` from the [review-v4 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v4). Verify the archive, extract into an empty directory, then:
+For the submitted source, follow the README clean-machine steps (verified from an empty Debian container: 104/104). The older offline runtime bundle: download `keyguard-reviewer.tar.gz` and `REVIEWER-SHA256SUMS` from the [review-v4 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v4). Verify the archive, extract into an empty directory, then:
 
 ```sh
 sha256sum -c SHA256SUMS

@@ -90,7 +90,7 @@ The review-v5 robustness update leaves both holdout results unchanged and adds: 
 
 `docker build -t keyguard-track4 .` works from a clean clone; it does not require prebuilt files in `dist/`. The exact base digest is pinned. `compose.yaml` supplies the authoritative TLS API; `compose.replicas.yaml` adds separately mounted read nodes. See the runbook for certificates, origins, credentials and state ownership.
 
-The [review-v4 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v4) includes a checksummed reviewer bundle with both runtime images. Extract it, run `sha256sum -c SHA256SUMS`, then `./scripts/demo.sh --docker`. Tests run unprivileged with networking disabled, a read-only root/source and temporary writable state. Committed logs remain available without downloading that bundle. `scripts/collect-evidence.sh` regenerates them.
+The [review-v4 release](https://github.com/lokendra005/KeyGuard_Devforge/releases/tag/review-v4) includes a checksummed reviewer bundle with both runtime images; it predates the current source, so for the submitted code use the clean-machine steps above (or `docker build`), and use the bundle only as an offline runtime. Extract it, run `sha256sum -c SHA256SUMS`, then `./scripts/demo.sh --docker`. Tests run unprivileged with networking disabled, a read-only root/source and temporary writable state. Committed logs remain available without downloading that bundle. `scripts/collect-evidence.sh` regenerates them.
 
 ## Security boundaries
 
