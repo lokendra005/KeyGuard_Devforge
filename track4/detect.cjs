@@ -1,5 +1,28 @@
 "use strict";
 const C = require("./crypto.cjs");
+const HLC = require("./hlc.cjs");
+const A = (technique, name, tactic) => Object.freeze({ technique, name, tactic });
+const VALID = A("T1078", "Valid Accounts", "TA0001 Initial Access / TA0003 Persistence / TA0004 Privilege Escalation / TA0005 Defense Evasion");
+const MANIP = A("T1098", "Account Manipulation", "TA0003 Persistence / TA0004 Privilege Escalation");
+const REMOTE = A("T1021", "Remote Services", "TA0008 Lateral Movement");
+const TAMPER = [
+  A("T1070", "Indicator Removal", "TA0005 Defense Evasion"),
+  A("T1565.001", "Stored Data Manipulation", "TA0040 Impact"),
+];
+const ATTACK = Object.freeze({
+  unexpected_role_change: [MANIP],
+  access_after_role_change: [VALID],
+  access_after_revocation: [VALID],
+  access_after_role_revocation: [VALID],
+  approval_scope_violation: [VALID],
+  self_approval: [MANIP],
+  unexpected_service_access: [REMOTE],
+  lateral_movement_candidate: [REMOTE, A("T1570", "Lateral Tool Transfer", "TA0008 Lateral Movement")],
+  cross_identity_lateral_candidate: [A("T1550", "Use Alternate Authentication Material", "TA0005 Defense Evasion / TA0008 Lateral Movement"), REMOTE],
+  conflicting_event_record: TAMPER,
+  input_integrity: TAMPER,
+});
+for (const list of Object.values(ATTACK)) Object.freeze(list);
 
 function csv(raw) {
   C.text(raw, 64 * 1024 * 1024);
@@ -226,9 +249,18 @@ function normalize(event, index, config) {
     0,
     3600000,
   );
-  const corrected = time(e.event_time_utc) - offset;
+  let corrected = time(e.event_time_utc) - offset;
   const received = time(e.received_time_utc ?? e.event_time_utc);
+  // Optional HLC causal stamp: orders hlc-stamped rows; adopts hlc.l only inside the clock-uncertainty interval.
+  let hlc = null, hlcOutside = false;
+  if (e.hlc !== undefined) {
+    hlc = HLC.parse(e.hlc);
+    C.check(hlc, "INVALID_HLC");
+    if (Math.abs(hlc.l - corrected) <= uncertainty) corrected = hlc.l;
+    else hlcOutside = true;
+  }
   return {
+    ...(hlc ? { hlc } : {}),
     event: e,
     index,
     corrected_ms: corrected,
@@ -241,7 +273,8 @@ function normalize(event, index, config) {
       Math.abs(offset) > (config.max_offset_ms ?? 300000) ||
       corrected - uncertainty > received ||
       received - corrected - uncertainty > (config.max_lateness_ms ?? 120000) ||
-      event.received_time_utc === undefined,
+      event.received_time_utc === undefined ||
+      hlcOutside,
     // Missing receipt time is weaker than contradictory timing: ordering can still be proven from event time.
     receipt_missing_only:
       event.received_time_utc === undefined &&
@@ -436,8 +469,11 @@ function detect(events, approvals, config = {}) {
     row.out_of_order = row.latest_ms < watermark;
     watermark = Math.max(watermark, row.earliest_ms);
   }
-  observations.sort(
-    (a, b) => a.corrected_ms - b.corrected_ms || a.index - b.index,
+  // ponytail: mixed hlc/non-hlc rows fall back to corrected_ms; not a strict total order if both kinds interleave closely.
+  observations.sort((a, b) =>
+    a.hlc && b.hlc
+      ? HLC.compare(a.hlc, b.hlc) || a.index - b.index
+      : a.corrected_ms - b.corrected_ms || a.index - b.index,
   );
   const suspiciousChanges = new Map(),
     roleGrants = new Map(),
@@ -464,6 +500,7 @@ function detect(events, approvals, config = {}) {
       ],
       detected_at_ms: Math.max(...rows.map((r) => r.received_ms)),
       explanation,
+      attack: ATTACK[rule],
       uncertain_order:
         rows.some((r) => r.uncertain) ||
         rows.some((r, i) => i > 0 && rows[i - 1].latest_ms >= r.earliest_ms),
@@ -828,6 +865,7 @@ function detect(events, approvals, config = {}) {
       events: ids,
       sessions: [],
       detected_at_ms: null,
+      attack: ATTACK.input_integrity,
       explanation: `${list.length} record(s) were quarantined (${reason}) and not evaluated by the behavioural rules. Malformed, backdated or out-of-window records can hide activity; review them.`,
       uncertain_order: true,
     });
@@ -945,4 +983,4 @@ function score(report, labels, positiveLabels) {
       "Retrospective event-level evaluation using receipt timestamps; not production accuracy or measured live processing latency.",
   };
 }
-module.exports = { csv, detect, score, estimateClock, learn, time, unique };
+module.exports = { ATTACK, csv, detect, score, estimateClock, learn, time, unique };
