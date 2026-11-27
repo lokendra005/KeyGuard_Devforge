@@ -12,7 +12,7 @@
     "compose.replicas.yaml": "9bfe96ba233cb4d2f839990b8fb9176d06c937e8cfd60d4c7b0819f8548d0235",
     "compose.track4.yaml": "61f70780130a4136cddba487c5643b83949bb2ad2f895c851a6d8cc91bf70f4d",
     "compose.yaml": "2cffc322496ab490ed92f9d249c7532edec17d3061b92024e7ba0419675fd3ce",
-    "scripts/build-deliverables.py": "60460ddf175444825dac89f92b1136b68e63ec0685ccb000118d88842bdf3733",
+    "scripts/build-deliverables.py": "f9d53a0b99d2419bf2e3eb54842676468ea8d8406782a5311d49f9e6d6230e18",
     "scripts/collect-evidence.sh": "bb2f2b6c2a58d7a6011f3bbbdefe5865a7ea7e378fc754f0a6a65239606207b8",
     "scripts/demo.sh": "af453ceb9162336974c793323ba86806f07e03b50f083114e35ce84ca4ac3f08",
     "scripts/deployment-smoke.py": "c9f3ecf342fd4494c183d74420c6ec424bae0a5afcc6cd24ad692078dbace921",

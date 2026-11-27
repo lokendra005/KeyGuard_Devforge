@@ -4,7 +4,7 @@ Post-quantum protected files, recoverable identities and encrypted delivery for 
 
 **No API key, hosted service, model or npm installation is required.** Runtime decisions use ownership, live identity/key state, signed commands and cryptographic verification. Example names and baseline data are configuration, never expected-answer branches.
 
-- [Two-page brief](docs/KeyGuard-brief.pdf) · [Video walkthrough](https://drive.google.com/drive/folders/1PSfjDx8Oe8Mvfz7y5mz6MsXEh54Xfo05?usp=sharing) ·
+- [Two-page brief](docs/KeyGuard-brief.pdf) · [Video walkthrough](https://drive.google.com/drive/folders/1PSfjDx8Oe8Mvfz7y5mz6MsXEh54Xfo05?usp=sharing)
 - [Architecture, algorithms and conditional security arguments](docs/TRACK4_DESIGN.md)
 - [Operator runbook](docs/TRACK4_OPERATIONS.md) · [Reviewer instructions](docs/SUBMISSION.md)
 - [Committed test evidence](evidence/README.md) · [Security review resolution](docs/REVIEW_RESOLUTION.md)
