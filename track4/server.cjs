@@ -32,10 +32,11 @@ function server(options = {}) {
   ]);
   const rates = new Map(),
     active = new Map();
-  // Slow uploads are bounded per peer (4), globally by count (512) and by buffered bytes (64 MiB),
-  // so exhausting the body pool needs 128+ source addresses; GETs never consume body slots.
+  // Slow uploads are bounded per peer (4 uploads, 16 MiB buffered in total) and globally (512 uploads,
+  // 256 MiB), so exhausting either global pool needs 16+ source addresses; GETs never use body slots.
   let inflight = 0,
     buffered = 0;
+  const peerBytes = new Map();
   const handler = async (req, res) => {
     req.socket.emit("kig-headers");
     let admitted = false,
@@ -149,8 +150,10 @@ function server(options = {}) {
       for await (const chunk of req) {
         size += chunk.length;
         buffered += chunk.length;
+        peerBytes.set(peer, (peerBytes.get(peer) || 0) + chunk.length);
         C.check(size <= 16 * 1024 * 1024, "INPUT_TOO_LARGE");
-        C.check(buffered <= 64 * 1024 * 1024, "BUSY");
+        C.check(peerBytes.get(peer) <= 16 * 1024 * 1024, "BUSY");
+        C.check(buffered <= 256 * 1024 * 1024, "BUSY");
         chunks.push(chunk);
       }
       clearTimeout(bodyTimer);
@@ -185,6 +188,11 @@ function server(options = {}) {
     } finally {
       clearTimeout(bodyTimer);
       buffered -= size;
+      if (size) {
+        const left = peerBytes.get(peer) - size;
+        if (left) peerBytes.set(peer, left);
+        else peerBytes.delete(peer);
+      }
       if (uploading) inflight--;
       if (admitted) {
         const count = active.get(peer) - 1;

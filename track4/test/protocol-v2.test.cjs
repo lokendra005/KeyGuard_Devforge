@@ -461,3 +461,27 @@ test("revoke reports when it holds on every replica, including outstanding lease
   A.ok(result.replica_grace_ms <= Math.ceil(grant.body.lease_ms / 0.99));
   A.equal(result.effective_everywhere_at_ms, result.effective_at_ms + result.replica_grace_ms);
 });
+test("rotation, role changes and ownership transfers also report when they hold on every replica", (t) => {
+  const f = fixture(t),
+    a = node(f, t);
+  const grant = f.sync(a.beginSync());
+  a.install(grant);
+  const next = C.generate(),
+    member = f.store.db.prepare("SELECT epoch FROM actors WHERE id=?").get(f.actors.owner);
+  const rotated = f.call("owner", {
+    op: "rotate",
+    new_public_key: next.public_key,
+    grace_ms: 0,
+    proof: C.sign(next.private_key, "KIG/rotate/v1", {
+      authority: f.store.get("authority"),
+      actor: f.actors.owner,
+      epoch: member.epoch,
+      new_public_key: next.public_key,
+      grace_ms: 0,
+    }),
+  });
+  A.ok(rotated.replica_grace_ms >= grant.body.lease_ms);
+  A.equal(rotated.effective_everywhere_at_ms - rotated.replica_grace_ms, f.now());
+  const transfer = f.trusted({ op: "file.transfer", asset: f.other, actor: f.actors.peer, recipient: f.actors.admin, version: 1 });
+  A.ok(transfer.replica_grace_ms >= grant.body.lease_ms);
+});

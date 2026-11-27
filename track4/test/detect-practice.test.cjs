@@ -61,3 +61,38 @@ test("unknown outcomes, revocation subjects, reinstatement and bad records fail 
   A.equal(mixed.rejected_approvals.length, 1);
   A.equal(mixed.alerts[0].rule, "unexpected_role_change");
 });
+
+test("quarantine is never silent: decoys, malformed records and misused approvals alert", () => {
+  const config = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "..", "examples", "practice-policy.json"), "utf8"),
+  );
+  const events = D.csv(read("events.csv")),
+    approvals = JSON.parse(read("approvals.json"));
+  const esc = events.find((e) => e.event_id === "evt-008");
+  // A benign decoy delivered first with the same event_id: the analysed copy alerts as conflicting.
+  const decoy = D.detect([{ ...esc, role_after: "viewer", action: "sign_in" }, ...events], approvals, config);
+  const conflict = decoy.alerts.find((a) => a.rule === "conflicting_event_record");
+  A.deepEqual(conflict.events, ["evt-008"]);
+  A.ok(conflict.identities.includes("user-blair"));
+  // Unparseable timestamps are quarantined into one input_integrity alert naming identity and services.
+  const broken = D.detect(
+    events.map((e) => (e.event_id === "evt-008" ? { ...e, event_time_utc: "2026-01-15T09:02:10" } : e)),
+    approvals,
+    config,
+  );
+  const integrity = broken.alerts.find((a) => a.rule === "input_integrity");
+  A.equal(integrity.reason, "INVALID_TIME");
+  A.deepEqual(integrity.events, ["evt-008"]);
+  A.deepEqual(integrity.identities, ["user-blair"]);
+  A.equal(D.score(broken, D.csv(read("labels.csv")), ["unexpected_role_change"]).tp >= 1, true);
+  // A leap second is a valid RFC 3339 time, not a reason to drop the record.
+  A.equal(D.time("2026-12-31T23:59:60Z"), Date.parse("2026-12-31T23:59:59.999Z"));
+  // The approver citing an approval it issued, away from its issue time, is still a scope violation.
+  const misuse = D.detect(
+    [...events, { ...events[2], event_id: "evt-x", source_service: "portal", target_service: "billing", action: "export",
+      event_time_utc: "2026-01-15T09:02:00.000Z", received_time_utc: "2026-01-15T09:02:00.100Z" }],
+    approvals,
+    config,
+  );
+  A.ok(misuse.events.find((r) => r.event.event_id === "evt-x").labels.includes("approval_scope_violation"));
+});

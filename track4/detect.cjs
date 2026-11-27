@@ -74,11 +74,15 @@ function time(raw) {
       +day <= days &&
       +hour < 24 &&
       +minute < 60 &&
-      +second < 60 &&
+      (+second < 60 || (+second === 60 && +minute === 59)) &&
       (/^[Zz]$/.test(zone) || (+zone.slice(1, 3) <= 23 && +zone.slice(4) < 60)),
     "INVALID_TIME",
   );
-  const normalized = `${year}-${month}-${day}T${hour}:${minute}:${second}.${(fraction || "").padEnd(3, "0").slice(0, 3)}${zone.toUpperCase()}`;
+  // An RFC 3339 leap second (hh:59:60 local) is held at the last millisecond of that minute.
+  const normalized =
+    +second === 60
+      ? `${year}-${month}-${day}T${hour}:${minute}:59.999${zone.toUpperCase()}`
+      : `${year}-${month}-${day}T${hour}:${minute}:${second}.${(fraction || "").padEnd(3, "0").slice(0, 3)}${zone.toUpperCase()}`;
   const n = Date.parse(normalized);
   C.check(Number.isSafeInteger(n), "INVALID_TIME");
   return n;
@@ -139,6 +143,15 @@ const DEFAULT_OUTCOMES = Object.freeze(
     ].map((x) => [x, "failure"]),
   ]),
 );
+// Who/where a quarantined record claims to describe, so quarantine is reported, never silent.
+function brief(event) {
+  const text = (v) => (typeof v === "string" && v.length ? v : null);
+  if (!event || typeof event !== "object") return {};
+  return {
+    actor: text(event.actor),
+    services: [text(event.source_service), text(event.target_service)].filter(Boolean),
+  };
+}
 // Identical redelivery is dropped. A conflicting copy throws unless `rejected` is supplied;
 // then the first copy is analysed and later conflicting copies are quarantined.
 function unique(events, rejected) {
@@ -151,13 +164,13 @@ function unique(events, rejected) {
       content = C.digest(event);
     } catch (error) {
       if (!rejected) throw error;
-      rejected.push({ index, event_id: null, reason: error.code || "INVALID_EVENT" });
+      rejected.push({ index, event_id: null, reason: error.code || "INVALID_EVENT", ...brief(event) });
       return false;
     }
     const previous = seen.get(id);
     if (previous !== undefined && previous !== content) {
       if (rejected) {
-        rejected.push({ index, event_id: id, reason: "conflicting_duplicate" });
+        rejected.push({ index, event_id: id, reason: "conflicting_duplicate", ...brief(event) });
         return false;
       }
       const error = new C.Fault("DUPLICATE_EVENT");
@@ -334,6 +347,7 @@ function detect(events, approvals, config = {}) {
     "INVALID_APPROVALS",
   );
   const strict = config.strict_input === true;
+  const adminWindow = C.integer(config.approval_admin_window_ms ?? 30000, 0, 3600000);
   const changeMap = new Map(),
     revokedRoles = new Map(),
     rejected = [],
@@ -399,14 +413,14 @@ function detect(events, approvals, config = {}) {
       if (baseline && row.corrected_ms <= baseline.reference_end_ms) {
         overlapping++;
         C.check(!strict, "BASELINE_HOLDOUT_OVERLAP");
-        rejected.push({ index, event_id: event.event_id, reason: "BASELINE_HOLDOUT_OVERLAP" });
+        rejected.push({ index, event_id: event.event_id, reason: "BASELINE_HOLDOUT_OVERLAP", ...brief(event) });
         return;
       }
       observations.push(row);
     } catch (error) {
       if (strict) throw error;
       if (error.code !== "BASELINE_HOLDOUT_OVERLAP")
-        rejected.push({ index, event_id: event.event_id, reason: error.code || "INVALID_EVENT" });
+        rejected.push({ index, event_id: event.event_id, reason: error.code || "INVALID_EVENT", ...brief(event) });
     }
   });
   C.check(!overlapping || observations.length > 0, "BASELINE_HOLDOUT_OVERLAP");
@@ -578,8 +592,19 @@ function detect(events, approvals, config = {}) {
           revoked.get(e.actor).event.event_id,
       );
     }
-    // The approver acting on an approval (approve/revoke administration) is not its beneficiary.
-    if (successful && a && !a.invalid && a.approved_by === e.actor && a.subject !== e.actor)
+    // The approver issuing an approval (at its valid_from) or revocation (at its effective time) is not
+    // its beneficiary. Citing it at any other time, e.g. on the approver's own access, stays a violation.
+    const issuedAt = a && (a.operation === "revoke_role" ? a.effective_ms : a.from_ms);
+    if (
+      successful &&
+      a &&
+      !a.invalid &&
+      a.approved_by === e.actor &&
+      a.subject !== e.actor &&
+      Number.isSafeInteger(issuedAt) &&
+      row.earliest_ms <= issuedAt + adminWindow &&
+      row.latest_ms >= issuedAt - adminWindow
+    )
       row.labels.push("approval_administration");
     else if (successful && a && !scoped(a, row)) {
       row.labels.push("approval_scope_violation");
@@ -763,6 +788,45 @@ function detect(events, approvals, config = {}) {
       crossIncidents.set(pivot, { result, at: row.corrected_ms });
     }
   }
+  // Quarantine is loud: a conflicting copy alerts on the analysed copy (a decoy can hide the real
+  // record), and every other quarantined record joins one input_integrity alert per reason.
+  const analysed = new Map(observations.map((r) => [r.event.event_id, r])),
+    integrity = new Map();
+  for (const r of rejected) {
+    const row = r.reason === "conflicting_duplicate" && analysed.get(r.event_id);
+    if (row) {
+      if (!row.labels.includes("conflicting_event_record")) row.labels.push("conflicting_event_record");
+      const result = alert(
+        "conflicting_event_record",
+        [row],
+        "Different records share this event_id. The first copy was analysed and the conflicting copy quarantined; a decoy copy can hide the real record, so both need review.",
+      );
+      for (const x of [r.actor, ...(r.services || [])].filter(Boolean))
+        if (x === r.actor ? !result.identities.includes(x) : !result.services.includes(x))
+          (x === r.actor ? result.identities : result.services).push(x);
+      continue;
+    }
+    const list = integrity.get(r.reason) || [];
+    list.push(r);
+    integrity.set(r.reason, list);
+  }
+  for (const [reason, list] of integrity) {
+    const ids = [...new Set(list.map((r) => r.event_id).filter((id) => id !== null))];
+    const identities = [...new Set(list.map((r) => r.actor).filter(Boolean))];
+    alerts.push({
+      id: C.digest(["input_integrity", reason, ids, list.length]),
+      rule: "input_integrity",
+      reason,
+      identity: identities[0] ?? null,
+      identities,
+      services: [...new Set(list.flatMap((r) => r.services || []))],
+      events: ids,
+      sessions: [],
+      detected_at_ms: null,
+      explanation: `${list.length} record(s) were quarantined (${reason}) and not evaluated by the behavioural rules. Malformed, backdated or out-of-window records can hide activity; review them.`,
+      uncertain_order: true,
+    });
+  }
   for (const row of observations)
     if (!row.labels.length) row.labels.push("routine");
   return {
@@ -798,7 +862,7 @@ function detect(events, approvals, config = {}) {
       max_lateness_ms: maxDelay,
       max_events: 100000,
       timestamp_precision:
-        "milliseconds; fractional digits beyond three are truncated; timezone required; leap seconds rejected",
+        "milliseconds; fractional digits beyond three are truncated; timezone required; a leap second (:59:60) is held at :59.999",
       timing_source:
         "operator-supplied offset/uncertainty; no network time assumptions",
     },
@@ -813,7 +877,7 @@ function score(report, labels, positiveLabels) {
   const truth = new Map(
     labels.map((x) => [x.event_id, positives.has(x.label)]),
   );
-  // Quarantined records are scored as not alerted, so rejecting input can never raise recall.
+  // A quarantined record counts as alerted only if an integrity alert names it.
   const quarantined = new Set(
     (report.rejected || []).map((r) => r.event_id).filter((id) => id !== null),
   );
@@ -829,9 +893,10 @@ function score(report, labels, positiveLabels) {
     fp = 0,
     fn = 0,
     tn = 0;
+  const named = new Set(report.alerts.flatMap((a) => a.events));
   for (const id of quarantined)
-    if (truth.get(id)) fn++;
-    else tn++;
+    if (named.has(id)) truth.get(id) ? tp++ : fp++;
+    else truth.get(id) ? fn++ : tn++;
   const delays = [];
   const byID = new Map(report.alerts.map((a) => [a.id, a]));
   for (const row of report.events) {

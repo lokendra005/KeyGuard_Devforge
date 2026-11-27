@@ -7,6 +7,6 @@
   ],
   "replica_audit": "Signed local reads are uploaded and acknowledged on sync; partitions delay visibility.",
   "clock_assumption": "Monotonic node clock progresses through suspension; lease bound L/(1-rho).",
-  "revocation_everywhere": "Revoke returns effective_everywhere_at_ms = latest pre-revocation lease expiry (rho = 1%); replicas may serve the revoked key until then, the authority never does.",
+  "revocation_everywhere": "Revoke, rotate, role change, transfer and recovery return effective_everywhere_at_ms = latest pre-revocation lease expiry (rho = 1%); replicas may serve the revoked key until then, the authority never does.",
   "at_rest": "Master key is beside the database; protects database-only disclosure, not whole-directory theft."
 }

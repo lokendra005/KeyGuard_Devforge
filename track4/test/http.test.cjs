@@ -429,3 +429,36 @@ test(
     A.notEqual(bypass.status, 429);
   },
 );
+
+test(
+  "one address cannot fill the shared upload buffer by stalling large bodies",
+  { timeout: 15000, skip: process.platform !== "linux" && "needs Linux 127.0.0.0/8 source addresses" },
+  async (t) => {
+    const net = require("node:net"),
+      f = fixture(t),
+      api = server({ directory: f.directory });
+    await new Promise((resolve) => api.listen(0, "127.0.0.1", resolve));
+    const port = api.address().port,
+      sockets = [];
+    t.after(() => {
+      for (const s of sockets) s.destroy();
+      api.close();
+      api.closeAllConnections();
+    });
+    const mib = Buffer.alloc(1 << 20, 0x20);
+    for (let j = 0; j < 4; j++) {
+      const s = net.createConnection({ host: "127.0.0.1", port, localAddress: "127.0.7.2" });
+      sockets.push(s);
+      s.on("error", () => {});
+      s.write(`POST /v1/command HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nContent-Length: ${16 << 20}\r\n\r\n{`);
+      for (let m = 0; m < 15; m++) s.write(mib);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const other = await fetch("http://127.0.0.1:" + port + "/v1/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: '{"x":1}',
+    });
+    A.notEqual(other.status, 429);
+  },
+);

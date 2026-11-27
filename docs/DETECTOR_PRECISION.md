@@ -53,4 +53,8 @@ Both holdout results are unchanged (F1 0.9000 and 0.9630). Changes, each with a 
 - **Missing receipt time** no longer disables ordered pivots when event-time intervals still prove the order; contradictory timing (event after receipt, offset above `max_offset_ms`, lateness) still does.
 - **Incidents survive rebuilds.** Incident state lives on rows, so expiry rebuilds and component merges extend the existing alert instead of opening a new one per event. Above 512 live edges per actor, rebuilds are amortized (components may briefly keep up to 12.5% expired edges). One identity with 100,000 unusual edges across 2,000 services: about 1.3 s, 180 MB, a few hundred incidents (previously out of memory).
 
-Remaining blind spots: hops further apart than the 30-minute window, and pivots whose recorded source offset exceeds `max_offset_ms`.
+- **Quarantine is loud** (review-v6). A record sharing an `event_id` with a different analysed record raises `conflicting_event_record` on the analysed copy, naming both versions' identities and services, because a decoy delivered first could otherwise hide the real record. Every other quarantined record joins one `input_integrity` alert per reason; scoring counts a quarantined record as alerted only when such an alert names it.
+- **Approval administration is time-bound.** The approver's event is administration only within `approval_admin_window_ms` (default 30 s) of the approval's `valid_from_utc` (grant) or `effective_at_utc` (revoke); citing it at any other time stays a scope violation.
+- **Leap seconds** (`hh:59:60`) are held at `hh:59:59.999` instead of quarantining the record.
+
+Remaining blind spots: hops further apart than the 30-minute window, pivots whose recorded source offset exceeds `max_offset_ms`, and follow-up rules (for example `access_after_role_change`) when the triggering record itself was quarantined; that record still raises an integrity alert.

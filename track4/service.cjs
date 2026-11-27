@@ -14,6 +14,13 @@ const DEFAULT_POLICY = Object.freeze({
   replay_window_ms: 120000,
 });
 const ROLES = new Set(["user", "auditor", "admin", "recovery", "replicator"]);
+// Replicas holding a lease granted before an authorization change may apply the old policy until that
+// lease expires. Every revoking change reports when it holds on every node (and when the old key's own
+// cutoff ends, for rotation), so callers wait instead of trusting the authority acknowledgement.
+function everywhere(store, now, floor = now) {
+  const at = Math.max(floor, store.get("lease_horizon_ms") || 0, now);
+  return { effective_everywhere_at_ms: at, replica_grace_ms: at - now };
+}
 function isAdmin(auth) {
   return auth.trusted || auth.role === "admin";
 }
@@ -374,15 +381,7 @@ function executeTransaction(store, input, options = {}) {
         actor,
       );
       store.record(now, op, auth.actor, { target: actor });
-      // Replicas holding a lease granted before this revoke may serve until it expires; report when
-      // the revocation holds on every node, so callers can wait instead of trusting the authority ack.
-      const grace = Math.max(0, (store.get("lease_horizon_ms") || 0) - now);
-      return {
-        revoked: true,
-        effective_at_ms: now,
-        effective_everywhere_at_ms: now + grace,
-        replica_grace_ms: grace,
-      };
+      return { revoked: true, effective_at_ms: now, ...everywhere(store, now) };
     }
     if (op === "put") {
       const actor = C.text(request.actor);
@@ -490,7 +489,7 @@ function executeTransaction(store, input, options = {}) {
         after: request.role,
         epoch: member.epoch + 1,
       });
-      return { epoch: member.epoch + 1 };
+      return { epoch: member.epoch + 1, ...everywhere(store, now) };
     }
     if (op === "file.transfer") {
       const asset = C.text(request.asset);
@@ -515,7 +514,7 @@ function executeTransaction(store, input, options = {}) {
         owner: recipient,
         version: file.version + 1,
       });
-      return { version: file.version + 1 };
+      return { version: file.version + 1, ...everywhere(store, now) };
     }
     if (op === "rotate") {
       const actor = auth.trusted ? C.text(request.actor) : auth.actor;
@@ -544,7 +543,12 @@ function executeTransaction(store, input, options = {}) {
         cutoff_ms: cutoff,
         epoch: member.epoch + 1,
       });
-      return { key_id, cutoff_ms: cutoff, epoch: member.epoch + 1 };
+      return {
+        key_id,
+        cutoff_ms: cutoff,
+        epoch: member.epoch + 1,
+        ...everywhere(store, now, cutoff),
+      };
     }
     if (op === "recover") {
       C.check(
@@ -636,7 +640,11 @@ function executeTransaction(store, input, options = {}) {
         complete: rec.complete,
         proposal_commitment: C.digest(proposal),
       });
-      return { complete: rec.complete, approvals: rec.approvals.length };
+      return {
+        complete: rec.complete,
+        approvals: rec.approvals.length,
+        ...(rec.complete ? everywhere(store, now) : {}),
+      };
     }
     if (op === "info") {
       C.check(
