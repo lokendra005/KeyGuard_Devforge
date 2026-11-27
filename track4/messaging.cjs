@@ -1,6 +1,38 @@
 "use strict";
 const C = require("./crypto.cjs");
-const SUITE = "ML-KEM-768/HKDF-SHA384/AES-256-GCM/ML-DSA-65";
+// Hybrid (X-Wing / X25519MLKEM768 style): confidential if EITHER X25519 or ML-KEM-768 holds.
+const SUITE = "KIG/msg/x25519-mlkem768/v2";
+const VERSION = 2;
+const X25519_SPKI = Buffer.from("302a300506032b656e032100", "hex");
+function x25519Key(raw) {
+  const bytes = C.b64(raw, 32);
+  try {
+    return C.c.createPublicKey({
+      key: Buffer.concat([X25519_SPKI, bytes]),
+      format: "der",
+      type: "spki",
+    });
+  } catch {
+    throw new C.Fault("INVALID_KEY");
+  }
+}
+function x25519Raw(publicKey) {
+  return publicKey
+    .export({ format: "der", type: "spki" })
+    .subarray(X25519_SPKI.length)
+    .toString("base64");
+}
+function x25519(privateKey, raw) {
+  let shared;
+  try {
+    shared = C.c.diffieHellman({ privateKey, publicKey: x25519Key(raw) });
+  } catch {
+    throw new C.Fault("INVALID_KEY");
+  }
+  // Low-order peer points yield an all-zero secret (OpenSSL rejects too; keep the explicit check).
+  C.check(shared.length === 32 && shared.some((b) => b !== 0), "INVALID_KEY");
+  return shared;
+}
 const MAX_MESSAGE = 1048576;
 const CHUNK = 16384;
 function binding(h) {
@@ -16,24 +48,41 @@ function binding(h) {
     to_key: h.to_key,
     expires: h.expires,
     kem_ciphertext: h.kem_ciphertext,
+    x25519_ephemeral: h.x25519_ephemeral,
   };
 }
-function derive(shared, offer, bound) {
-  return Buffer.from(
-    C.c.hkdfSync(
-      "sha384",
-      shared,
-      Buffer.from(C.digest(offer), "hex"),
-      Buffer.from(C.digest(["KIG/message-key/v1", bound]), "hex"),
-      32,
-    ),
-  );
+// IKM = ML-KEM shared || X25519 shared; salt = signed offer digest; info binds suite, transcript,
+// both receiver public keys, the KEM ciphertext and the sender's X25519 ephemeral (via bound).
+function derive(kemShared, dhShared, offer, bound) {
+  const ikm = Buffer.concat([kemShared, dhShared]);
+  try {
+    return Buffer.from(
+      C.c.hkdfSync(
+        "sha384",
+        ikm,
+        Buffer.from(C.digest(offer), "hex"),
+        Buffer.from(
+          C.digest([
+            "KIG/message-key/v2",
+            SUITE,
+            offer.public_key,
+            offer.x25519_public_key,
+            bound,
+          ]),
+          "hex",
+        ),
+        32,
+      ),
+    );
+  } finally {
+    ikm.fill(0);
+  }
 }
 function verifyOffer(offer, peerKey, now) {
   C.object(offer);
   const { signature, ...body } = offer;
   C.check(
-    body.version === 1 &&
+    body.version === VERSION &&
       body.suite === SUITE &&
       body.to_key === C.keyID(peerKey),
     "WRONG_RECIPIENT",
@@ -42,6 +91,7 @@ function verifyOffer(offer, peerKey, now) {
     C.text(body[k]);
   C.integer(body.expires, now, now + 300000);
   C.b64(body.public_key, 1184);
+  x25519Key(body.x25519_public_key);
   C.check(
     C.verify(peerKey, "KIG/message-offer/v1", body, signature),
     "INVALID_OFFER",
@@ -68,8 +118,11 @@ function encrypt(
     "WRONG_PEER",
   );
   const { ciphertext, sharedKey } = C.encapsulate(checked.public_key);
+  // One-use sender ephemeral; the KeyObject goes out of scope after this call.
+  const eph = C.c.generateKeyPairSync("x25519");
+  const dhShared = x25519(eph.privateKey, checked.x25519_public_key);
   const bound = {
-    version: 1,
+    version: VERSION,
     suite: SUITE,
     authority: checked.authority,
     message_id: C.random(),
@@ -80,14 +133,16 @@ function encrypt(
     to_key: checked.to_key,
     expires: checked.expires,
     kem_ciphertext: ciphertext.toString("base64"),
+    x25519_ephemeral: x25519Raw(eph.publicKey),
   };
-  const key = derive(sharedKey, offer, bound);
+  const key = derive(sharedKey, dhShared, offer, bound);
   let packet;
   try {
     packet = C.seal(key, bytes, bound);
   } finally {
     key.fill(0);
     sharedKey.fill(0);
+    dhShared.fill(0);
   }
   const encrypted = C.b64(packet.body);
   const header = {
@@ -117,11 +172,13 @@ function validateFrame(frame, senderKey, now) {
   const h = C.object(frame.header);
   C.check(
     Object.keys(h).sort().join(",") ===
-      "authority,chunks,digest,expires,from,from_key,kem_ciphertext,length,message_id,nonce,offer_id,suite,tag,to,to_key,version",
+      "authority,chunks,digest,expires,from,from_key,kem_ciphertext,length,message_id,nonce,offer_id,suite,tag,to,to_key,version,x25519_ephemeral",
     "INVALID_HEADER",
   );
   C.check(
-    h.version === 1 && h.suite === SUITE && h.from_key === C.keyID(senderKey),
+    h.version === VERSION &&
+      h.suite === SUITE &&
+      h.from_key === C.keyID(senderKey),
     "INVALID_HEADER",
   );
   for (const k of [
@@ -147,6 +204,7 @@ function validateFrame(frame, senderKey, now) {
     "INVALID_CHUNK_SIZE",
   );
   C.b64(h.kem_ciphertext, 1088);
+  C.b64(h.x25519_ephemeral, 32);
   C.b64(h.nonce, 12);
   C.b64(h.tag, 16);
   C.check(
@@ -173,8 +231,9 @@ class Receiver {
     C.integer(lifetime, 1000, 300000);
     const pair = C.c.generateKeyPairSync("ml-kem-768");
     const spki = pair.publicKey.export({ format: "der", type: "spki" });
+    const dh = C.c.generateKeyPairSync("x25519");
     const body = {
-      version: 1,
+      version: VERSION,
       suite: SUITE,
       authority: this.authority,
       id: C.random(),
@@ -184,6 +243,7 @@ class Receiver {
       to_key: C.keyID(this.identity.public_key),
       expires: now + lifetime,
       public_key: spki.subarray(C.KEM_SPKI.length).toString("base64"),
+      x25519_public_key: x25519Raw(dh.publicKey),
     };
     const offer = {
       ...body,
@@ -196,6 +256,7 @@ class Receiver {
     this.pending.set(body.id, {
       offer,
       privateKey: pair.privateKey,
+      x25519PrivateKey: dh.privateKey,
       chunks: new Map(),
       header: null,
     });
@@ -207,6 +268,7 @@ class Receiver {
     for (const [id, entry] of this.pending)
       if (entry.offer.expires < now) {
         entry.privateKey = undefined;
+        entry.x25519PrivateKey = undefined;
         this.pending.delete(id);
         failed.push(id);
       }
@@ -254,8 +316,9 @@ class Receiver {
         pending.privateKey,
         C.b64(h.kem_ciphertext, 1088),
       );
+      const dhShared = x25519(pending.x25519PrivateKey, h.x25519_ephemeral);
       const bound = binding(h);
-      const key = derive(shared, pending.offer, bound);
+      const key = derive(shared, dhShared, pending.offer, bound);
       try {
         const body = C.open(
           key,
@@ -266,11 +329,13 @@ class Receiver {
         return { complete: true, message_id: h.message_id, body };
       } finally {
         shared.fill(0);
+        dhShared.fill(0);
         key.fill(0);
       }
     } finally {
       // Ephemeral private KeyObjects never enter persistent state; native/GC erasure is an explicit trust assumption.
       pending.privateKey = undefined;
+      pending.x25519PrivateKey = undefined;
       pending.chunks.clear();
       this.pending.delete(h.offer_id);
     }
@@ -278,6 +343,7 @@ class Receiver {
   close() {
     for (const entry of this.pending.values()) {
       entry.privateKey = undefined;
+      entry.x25519PrivateKey = undefined;
       entry.chunks.clear();
     }
     this.pending.clear();
@@ -513,5 +579,7 @@ module.exports = {
   validateFrame,
   verifyOffer,
   SUITE,
+  VERSION,
   MAX_MESSAGE,
+  derive, // white-box tests only
 };
