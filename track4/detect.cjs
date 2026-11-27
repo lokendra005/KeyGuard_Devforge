@@ -3,6 +3,8 @@ const C = require("./crypto.cjs");
 
 function csv(raw) {
   C.text(raw, 64 * 1024 * 1024);
+  // Spreadsheet/PowerShell exports start with a UTF-8 byte-order mark.
+  if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
   const rows = [];
   let row = [],
     value = "",
@@ -44,13 +46,16 @@ function csv(raw) {
     row.push(value);
     rows.push(row);
   }
-  C.check(rows.length > 0, "INVALID_CSV");
-  const headers = rows.shift();
+  // Blank lines (for example trailing newlines) carry no record.
+  const records = rows.filter((r) => !(r.length === 1 && r[0] === ""));
+  C.check(records.length > 0, "INVALID_CSV");
+  // Header names are matched case-insensitively and without surrounding spaces.
+  const headers = records.shift().map((h) => h.trim().toLowerCase());
   C.check(
     new Set(headers).size === headers.length && headers.every((x) => x.length),
     "INVALID_CSV",
   );
-  return rows.map((values) => {
+  return records.map((values) => {
     C.check(values.length === headers.length, "INVALID_CSV");
     return Object.fromEntries(headers.map((key, i) => [key, values[i]]));
   });

@@ -109,6 +109,8 @@ function restoreAuthority(bundle, password, target, anchor) {
   );
   const snapshot = unwrap(bundle, password, "authority");
   C.check(snapshot.version === 1, "INVALID_BACKUP");
+  // Backups taken before enrollment lineage existed restore with no recorded lineage (setup trust root).
+  if (snapshot.tables && typeof snapshot.tables === "object") snapshot.tables.enrollments ??= [];
   const legacyTables = TABLES.filter(
     (t) =>
       !["replication_versions", "replica_bindings", "replica_events"].includes(

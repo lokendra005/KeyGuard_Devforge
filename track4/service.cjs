@@ -17,6 +17,15 @@ const ROLES = new Set(["user", "auditor", "admin", "recovery", "replicator"]);
 // Replicas holding a lease granted before an authorization change may apply the old policy until that
 // lease expires. Every revoking change reports when it holds on every node (and when the old key's own
 // cutoff ends, for rotation), so callers wait instead of trusting the authority acknowledgement.
+function lineage(db, actor) {
+  const seen = new Set();
+  for (let at = actor, i = 0; i < 256; i++) {
+    const row = db.prepare("SELECT enrolled_by FROM enrollments WHERE actor=?").get(at);
+    if (!row || seen.has(row.enrolled_by)) break;
+    seen.add((at = row.enrolled_by));
+  }
+  return seen;
+}
 function everywhere(store, now, floor = now) {
   const at = Math.max(floor, store.get("lease_horizon_ms") || 0, now);
   return { effective_everywhere_at_ms: at, replica_grace_ms: at - now };
@@ -369,8 +378,14 @@ function executeTransaction(store, input, options = {}) {
     if (op === "revoke") {
       requireAdmin(auth);
       const actor = C.text(request.actor);
-      const row = db.prepare("SELECT id FROM actors WHERE id=?").get(actor);
+      const row = db.prepare("SELECT * FROM actors WHERE id=?").get(actor);
       C.check(row, "NOT_FOUND");
+      // A signed command cannot remove the last admin; the trusted local operator still can (lost admin device).
+      if (!auth.trusted && row.role === "admin" && !row.disabled)
+        C.check(
+          db.prepare("SELECT count(*) AS n FROM actors WHERE role=? AND disabled=0").get("admin").n > 1,
+          "LAST_ADMIN",
+        );
       db.prepare(
         "UPDATE actors SET disabled=1,epoch=epoch+1 WHERE id=? AND disabled=0",
       ).run(actor);
@@ -448,6 +463,9 @@ function executeTransaction(store, input, options = {}) {
         "INVALID_PROOF",
       );
       db.prepare("INSERT INTO actors VALUES(?,?,0,1)").run(actor, request.role);
+      // Enrollment lineage lets recovery refuse two custodians created by one admin chain.
+      if (!auth.trusted)
+        db.prepare("INSERT INTO enrollments VALUES(?,?)").run(actor, auth.actor);
       const key_id = installKey(store, actor, request.public_key, now);
       if (request.role === "replicator")
         require("./replication.cjs").bind(store, actor, request);
@@ -618,6 +636,15 @@ function executeTransaction(store, input, options = {}) {
           .epoch,
       });
       if (rec.approvals.length === 2) {
+        // Two-person control: neither custodian may be enrolled (directly or through a chain) by the
+        // other, nor share an enrolling ancestor, so one admin cannot mint a puppet second approver.
+        const [x, y] = rec.approvals.map((a) => a.actor);
+        const lineX = lineage(db, x),
+          lineY = lineage(db, y);
+        C.check(
+          !lineX.has(y) && !lineY.has(x) && ![...lineX].some((a) => lineY.has(a)),
+          "CUSTODIANS_NOT_INDEPENDENT",
+        );
         db.prepare("UPDATE keys SET revoked=1 WHERE actor=?").run(actor);
         const key_id = installKey(store, actor, request.new_public_key, now);
         db.prepare("UPDATE actors SET disabled=0,epoch=epoch+1 WHERE id=?").run(

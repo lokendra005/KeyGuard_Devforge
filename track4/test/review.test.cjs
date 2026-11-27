@@ -305,3 +305,23 @@ test("SQLite notice filtering preserves unrelated runtime warnings", () => {
   A.match(result.stderr, /preserve-this-diagnostic/);
   A.doesNotMatch(result.stderr, /SQLite is an experimental feature/);
 });
+
+test("worker reads and audits fail closed in the contract shape on any error", () => {
+  const { execFileSync } = require("node:child_process");
+  const dir = require("node:fs").mkdtempSync(require("node:path").join(require("node:os").tmpdir(), "kig-shape-"));
+  const run = (req) =>
+    JSON.parse(execFileSync("node", [require("node:path").join(__dirname, "..", "..", "track4_service.cjs")], {
+      input: JSON.stringify(req), env: { ...process.env, TRACK4_STATE_DIR: dir }, stdio: ["pipe", "pipe", "ignore"],
+    }).toString());
+  run({ op: "setup", owners: { a: "u", b: "v" }, contents: { a: "A", b: "B" }, disabled: [], key_material: "k" });
+  A.equal(run({ op: "read", actor: "u", asset: "a", request_id: "r1" }).decision, "allow");
+  const conflict = run({ op: "read", actor: "v", asset: "b", request_id: "r1" });
+  A.equal(conflict.decision, "deny");
+  A.equal(conflict.body, undefined);
+  A.equal(run({ op: "read", actor: "u", asset: "a", request_id: 7 }).decision, "deny");
+  A.deepEqual(run({ op: "audit", request_id: "r1" }), { decision: "allow", request_id: "r1" });
+  const unknown = run({ op: "audit", request_id: "never" });
+  A.equal(unknown.decision, "deny");
+  A.equal(unknown.recorded, false);
+  A.equal(run({ op: "protected_read", actor: "u", asset: "a", challenge: "c", public_key: "!" }).decision, "deny");
+});

@@ -485,3 +485,38 @@ test("rotation, role changes and ownership transfers also report when they hold 
   const transfer = f.trusted({ op: "file.transfer", asset: f.other, actor: f.actors.peer, recipient: f.actors.admin, version: 1 });
   A.ok(transfer.replica_grace_ms >= grant.body.lease_ms);
 });
+test("one admin cannot satisfy two-person recovery with custodians it enrolled, and cannot remove the last admin", (t) => {
+  const f = fixture(t);
+  const A0 = f.store.get("authority");
+  const enroll = (by, key, actor, role = "recovery") => {
+    const id = C.generate();
+    f.call(by, { op: "enroll", actor, role, public_key: id.public_key, proof: C.sign(id.private_key, "KIG/enroll/v1", { authority: A0, actor, role }) }, key);
+    return id;
+  };
+  const p1 = enroll("admin", undefined, "puppet-1"),
+    p2 = enroll("admin", undefined, "puppet-2");
+  const next = C.generate(),
+    epoch = f.store.db.prepare("SELECT epoch FROM actors WHERE id=?").get(f.actors.owner).epoch;
+  const proposal = { authority: A0, actor: f.actors.owner, epoch, recovery_id: C.random(), expires: f.now() + 60000, new_public_key: next.public_key };
+  const body = { op: "recover", ...proposal, proof: C.sign(next.private_key, "KIG/recover/v1", proposal) };
+  const as = (actor, key) => S.execute(f.store, S.command(key, S.info(f.store, actor), body, f.now()));
+  // admin + puppet it enrolled
+  A.equal(f.call("admin", body).complete, false);
+  fails(() => as("puppet-1", p1), "CUSTODIANS_NOT_INDEPENDENT");
+  // two puppets sharing the enrolling admin
+  const body2 = { ...body, recovery_id: C.random() };
+  body2.proof = C.sign(next.private_key, "KIG/recover/v1", { ...proposal, recovery_id: body2.recovery_id });
+  S.execute(f.store, S.command(p1, S.info(f.store, "puppet-1"), body2, f.now()));
+  fails(() => S.execute(f.store, S.command(p2, S.info(f.store, "puppet-2"), body2, f.now())), "CUSTODIANS_NOT_INDEPENDENT");
+  // independent setup custodians still work
+  const body3 = { ...body, recovery_id: C.random() };
+  body3.proof = C.sign(next.private_key, "KIG/recover/v1", { ...proposal, recovery_id: body3.recovery_id });
+  f.call("recoveryA", body3);
+  A.equal(f.call("recoveryB", body3).complete, true);
+  // last admin; with a second admin, revoking one is allowed
+  fails(() => f.call("admin", { op: "revoke", actor: f.actors.admin }), "LAST_ADMIN");
+  const second = enroll("admin", undefined, "admin-2", "admin");
+  A.equal(S.execute(f.store, S.command(second, S.info(f.store, "admin-2"), { op: "revoke", actor: f.actors.admin }, f.now())).revoked, true);
+  fails(() => S.execute(f.store, S.command(second, S.info(f.store, "admin-2"), { op: "revoke", actor: "admin-2" }, f.now())), "LAST_ADMIN");
+  A.equal(f.trusted({ op: "revoke", actor: "admin-2" }).revoked, true);
+});

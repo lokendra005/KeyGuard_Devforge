@@ -96,3 +96,15 @@ test("quarantine is never silent: decoys, malformed records and misused approval
   );
   A.ok(misuse.events.find((r) => r.event.event_id === "evt-x").labels.includes("approval_scope_violation"));
 });
+
+test("CSV exports with a byte-order mark, CRLF, trailing blank lines or header case parse identically", () => {
+  const raw = read("events.csv");
+  const base = D.csv(raw);
+  for (const variant of [
+    "﻿" + raw,
+    raw.replace(/\n/g, "\r\n"),
+    raw + "\n\n\r\n",
+    raw.replace("event_id,", " Event_ID ,"),
+  ])
+    A.deepEqual(D.csv(variant), base);
+});

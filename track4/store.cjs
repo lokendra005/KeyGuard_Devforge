@@ -24,6 +24,7 @@ const C = require("./crypto.cjs");
 const TABLES = [
   "meta",
   "actors",
+  "enrollments",
   "keys",
   "files",
   "events",
@@ -40,6 +41,7 @@ const TABLES = [
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (id TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS actors (id TEXT PRIMARY KEY, role TEXT NOT NULL, disabled INTEGER NOT NULL, epoch INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS enrollments (actor TEXT PRIMARY KEY, enrolled_by TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS keys (id TEXT PRIMARY KEY, actor TEXT NOT NULL REFERENCES actors(id), public_key TEXT NOT NULL, not_before INTEGER NOT NULL, not_after INTEGER, revoked INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, owner TEXT REFERENCES actors(id), version INTEGER NOT NULL, packet TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY, payload TEXT NOT NULL, previous TEXT NOT NULL, hash TEXT NOT NULL, signature TEXT NOT NULL);
