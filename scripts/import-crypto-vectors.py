@@ -12,7 +12,7 @@ import pathlib
 import sys
 
 source = pathlib.Path(sys.argv[1])
-destination = pathlib.Path(__file__).resolve().parents[1] / "internal/guard/testdata/crypto-vectors.json.gz"
+destination = pathlib.Path(__file__).resolve().parents[1] / "track4/testdata/crypto-vectors.json.gz"
 revision = (source / "revision").read_text().strip()
 wycheproof_revision = (source / "wycheproof-revision").read_text().strip()
 sources = []

@@ -1,86 +1,62 @@
 [
   {
-    "start_seconds": 0,
-    "duration_seconds": 25,
-    "title": "Working system, reproducible evidence",
-    "narration": "This is KeyGuard for DevForge Track Four. This narrated walkthrough uses actual recorded adapter and test output. The source, run scripts and evidence are available in the repository. The system uses real post quantum cryptography, not mocked signatures or a dataset classifier. Runtime decisions use registered identities, current policy and cryptographic verification.",
-    "evidence_excerpt": "ACTUAL ADAPTER WALKTHROUGH | v24.11.1 | darwin/arm64\n\n\u2139 tests 104\n\u2139 pass 104\n\u2139 fail 0\n\u2139 skipped 0"
+    "start_seconds": 0.0,
+    "end_seconds": 23.28,
+    "title": "What KeyGuard is",
+    "narration": "This is KeyGuard, our submission for Track 4, Trust but Verify. It keeps files and messages safe when an identity key is lost, replaced or abused. All the cryptography is post-quantum, from OpenSSL 3.5: ML-KEM, ML-DSA and SLH-DSA. Keys are generated at runtime, and there is no AI or machine learning anywhere."
   },
   {
-    "start_seconds": 25,
-    "duration_seconds": 25,
-    "title": "Owner access and scenario isolation",
-    "narration": "The real process per request adapter initializes a scenario, allows its owner to read and denies access after revocation. A second trusted setup replaces scenario tables in one transaction. Invalid replacement rolls back. Production initialization remains separate and refuses to overwrite an authority. Expected policy errors return structured JSON without pretending the process crashed.",
-    "evidence_excerpt": "{\"ready\":true}\n\nread by current owner\n{\"body\":\"Public demonstration resource; no operator data.\",\"decision\":\"allow\"}\n\nprotected_read (real encapsulation and local decapsulation)\n{\"ciphertext_bytes\":1088,\"exact_hmac_verified\":true}\n\n{\"ready\":true}\n\nold scenario is inaccessible\n{\"decision\":\"deny\"}\n\nnew scenario's owner can read\n{\"body\":\"New scenario resource.\",\"decision\":\"allow\"}\n"
+    "start_seconds": 23.28,
+    "end_seconds": 38.32,
+    "title": "Start the authority",
+    "narration": "We start the authority. It stores policy, the protected data and a signed audit log in one atomic SQLite transaction, with a write-ahead log and full sync. A crash can never leave a half-applied change, and we test that with real process kills."
   },
   {
-    "start_seconds": 50,
-    "duration_seconds": 25,
-    "title": "Real protected reads",
-    "narration": "Protected reads use real M L KEM seven sixty eight encapsulation. The proof is the exact organizer specified HMAC over the challenge concatenated with stored content. An independent Python implementation generated sixteen keys, decapsulated the actual Linux adapter responses and recomputed the proofs. Signature verification also passes two hundred twenty five pinned independent vectors.",
-    "evidence_excerpt": "\u2714 ML-KEM protected read binds exact challenge/body; invalid keys and replays fail closed (15.807834ms)\nPASS: Node v24.11.1 / OpenSSL 3.5.4; 225 independent NIST/Wycheproof ML-DSA-65 verification vectors (82 valid, 143 invalid), including native context handling and canonical key/length validation.\n\nPASS: 16 independently generated pqcrypto ML-KEM-768 keys; decapsulation/HMAC interoperability, wrong-key/content, replay and post-revocation denial.\n"
+    "start_seconds": 38.32,
+    "end_seconds": 56.38,
+    "title": "Signed read (ML-DSA-65)",
+    "narration": "The owner reads their file. Every network request is signed with ML-DSA-65. The signature covers the authority, the destination node, the key's epoch, a one-time nonce and an expiry. So a captured request can't be replayed, sent to another node, or used after the key changes."
   },
   {
-    "start_seconds": 75,
-    "duration_seconds": 25,
-    "title": "Signed rotation and recovery",
-    "narration": "Network commands bind the authority, destination audience, actor, key fingerprint, epoch, nonce, expiry and operation. Rotation verifies possession of the replacement key and commits the cutoff atomically. In flight transfers continue only during the old key's valid grace period. Two distinct custodians approve loss recovery, and stale approvers or competing proposals fail.",
-    "evidence_excerpt": "\u2714 rotation has a precise cutoff, preserves content and rejects prior-epoch authorization (42.879166ms)\n\u2714 two-person recovery fences competing proposals and permanently retires old keys (53.13875ms)\n\u2714 failed persistence rolls back rotation and data, and clocks cannot silently regress (12.347542ms)\n\u2714 SIGKILL during rotation recovers the prior committed key and preserved revocation (90.522ms)\n\u2714 bounded loss recovery delivers exactly once; incomplete expired messages report failure (17.247291ms)\n\u2714 rotation, role changes and ownership transfers also report when they hold on every replica (41.339792ms)\n\u2714 one admin cannot satisfy two-person recovery with custodians it enrolled, and cannot remove the last admin (54.497375ms)\n\u2714 partial transfers survive receiver rotation during grace and fail exactly at cutoff (41.749333ms)"
+    "start_seconds": 56.38,
+    "end_seconds": 74.76,
+    "title": "Revoke the stolen device",
+    "narration": "Now the owner's laptop is stolen, so the operator revokes the key. The answer doesn't just say done. It reports the moment the revocation is guaranteed on every read node, based on the longest lease still outstanding. Across one hundred revocations on five replicas, the ninety-ninth percentile was one point one seconds."
   },
   {
-    "start_seconds": 100,
-    "duration_seconds": 25,
-    "title": "Independent nodes, bounded stale access",
-    "narration": "Each node keeps an encrypted cache and signed policy chain. A sync needs the replicator credential and a signature from the node's own key, so a stolen credential cannot export. Across one hundred revocations, a stolen key stops working on every node within about one second. Each revoke reports when it holds everywhere. Partitioned nodes expire closed.",
-    "evidence_excerpt": "100 revocations x 5 replicas (stolen key, old epoch):\nobservations: 500\np50_ms: 487\np95_ms: 1051\np99_ms: 1117\nmax_ms: 1168\nmax_reported_replica_grace_ms: 3016\n\npartition run, lease_ms 3000:\nnode 0 | UNAUTHORIZED | observed 91 ms\nnode 1 | UNAUTHORIZED | observed 185 ms\nnode 2 | UNAUTHORIZED | observed 339 ms\nnode 3 | LEASE_EXPIRED | observed 2921 ms\nnode 4 | LEASE_EXPIRED | observed 2945 ms"
+    "start_seconds": 74.76,
+    "end_seconds": 80.98,
+    "title": "Stolen key is rejected",
+    "narration": "The thief tries the stolen key. It's rejected, and it stays rejected after a restart and on every node."
   },
   {
-    "start_seconds": 125,
-    "duration_seconds": 25,
-    "title": "Crash safety and audit availability",
-    "narration": "The suite actually kills a process during an uncommitted rotation and checks recovery. Authentication, effects and signed audit records share a transaction. Forged requests now update bounded minute counters instead of filling the signed log. Reaching the normal audit budget cannot block revocation or recovery. Physical disk failure remains a real limit to durable commits.",
-    "evidence_excerpt": "old scenario is inaccessible\nnew scenario's owner can read\n{\"body\":\"New scenario resource.\",\"decision\":\"allow\"}\n\u2714 audit and file capacity failures preserve previously acknowledged state (13.048666ms)\n\u2714 SIGKILL during rotation recovers the prior committed key and preserved revocation (90.522ms)\n\u2714 identity metadata needs proof of key possession and forged HTTP requests do not inflate the signed log (90.892916ms)\n\u2714 worker scenarios reset atomically; expected errors use JSON exit zero and omit SQLite noise (998.527ms)"
+    "start_seconds": 80.98,
+    "end_seconds": 100.06,
+    "title": "The system detects the attack on itself",
+    "narration": "KeyGuard also detects the attack on itself. The rejected attempt became a signed security alert that names the identity, the exact key, the service and the audit event. As a response, that identity's dashboard sessions and pending message keys are cancelled. Alerts are capped per identity per minute, so a thief can't flood the log."
   },
   {
-    "start_seconds": 150,
-    "duration_seconds": 25,
-    "title": "Backups and signed history",
-    "narration": "File contents and identity backups are encrypted. Signed SHA three eighty four audit chains preserve record boundaries and correlation history. A trusted checkpoint detects an older restored backup. Cold startup verifies a signed saved checkpoint and checks only newer links; full exported history can be checked independently. Master keys are beside the database, so encryption protects database only leaks, not an entire compromised host.",
-    "evidence_excerpt": "\u2714 retrying a read correlation ID rechecks policy and preserves both historical decisions (14.095417ms)\n\u2714 signed audit rejects edits, truncation and text injection without conflating records (6.03175ms)\n\u2714 encrypted key and authority backups verify corruption, wrong passwords and stale anchors (650.947917ms)\n\u2714 frozen reference baseline handles renamed actions, self-approval, revocation, 70s paths, absent correlation and harmless novelty (312.526875ms)\n\u2714 signed persisted checkpoints verify only the suffix on cold start and reject signature/truncation attacks (108.778291ms)\n\u2714 status verifies only the signed suffix after its cached checkpoint; full exported history still verifies (461.653208ms)\n\"scope\": \"Single-process, signed-command core including signature verification, crypto, SQLite commit and signed audit; excludes HTTP/process startup. Local filesystem/cache conditions apply.\""
+    "start_seconds": 100.06,
+    "end_seconds": 117.7,
+    "title": "Merkle tree head, ML-DSA + SLH-DSA",
+    "narration": "The audit log is tamper-evident twice over: a SHA-384 hash chain and an RFC 9162 Merkle tree. Every audit answer can carry an inclusion proof, and the tree head is signed with both ML-DSA and SLH-DSA, so its integrity doesn't rest on a single signature scheme."
   },
   {
-    "start_seconds": 175,
-    "duration_seconds": 25,
-    "title": "Encrypted client delivery",
-    "narration": "The recipient signs a one use ephemeral key offer bound to both peers. The sender encapsulates, derives a transcript bound key and encrypts locally. The relay stores ciphertext. Reordered and duplicate chunks are handled, conflicting or modified chunks fail, and incomplete messages expire. Real CLI processes transfer a file and acknowledge it. Session resumption is deliberately unsupported.",
-    "evidence_excerpt": "\u2714 real CLI sender/receiver deliver an encrypted file through HTTP and acknowledge it (1271.230292ms)\n\u2714 one-time KEM message decrypts only after complete authenticated reassembly; duplicates are rejected (48.637417ms)\n\u25b6 message recipient, sender, suite, authority, chunks and ciphertext are authenticated\n\u2714 message recipient, sender, suite, authority, chunks and ciphertext are authenticated (127.1745ms)\n\u2714 bounded loss recovery delivers exactly once; incomplete expired messages report failure (17.247291ms)\n\u2714 relay stores ciphertext, supports partial retries and checks both peers at every operation (85.324375ms)"
+    "start_seconds": 117.7,
+    "end_seconds": 148.28,
+    "title": "Detection with MITRE ATT&CK",
+    "narration": "Detection combines rules with a graph: role changes without approval, access right after an unexplained role change, and lateral movement across services, including credential hopping between identities. Every alert names the identity, the events and the MITRE ATT&CK technique. On the organizer's practice set it finds five out of five with zero false alerts. On our two independently built holdouts, F1 is 0.90 and 0.96, and we report false alerts per thousand benign events and the median time to alert."
   },
   {
-    "start_seconds": 200,
-    "duration_seconds": 25,
-    "title": "Detection beyond the practice set",
-    "narration": "Both holdouts use separate reference and evaluation windows, and their scores are unchanged. On the organizer practice set, all five labelled findings alert, with no false alerts. Credential hopping across identities is detected. Labels only enter scoring. Synthetic accuracy is not a production guarantee.",
-    "evidence_excerpt": "{\n  \"tp\": 1080,\n  \"fp\": 240,\n  \"fn\": 0,\n  \"tn\": 10680,\n  \"f1\": 0.9,\n  \"median_alert_latency_ms\": 83651.5,\n  \"false_alerted_events_per_1000_benign\": 21.978021978021978\n}"
+    "start_seconds": 148.28,
+    "end_seconds": 171.68,
+    "title": "Committed evidence",
+    "narration": "Every number we claim comes from committed evidence. One hundred and four out of one hundred and four tests pass offline on both ARM64 and AMD64, along with the organizer's validator and an independent post-quantum interop check. Messages use a hybrid X25519 plus ML-KEM key exchange, so they stay confidential if either primitive breaks."
   },
   {
-    "start_seconds": 225,
-    "duration_seconds": 25,
-    "title": "Input diversity and realistic limits",
-    "narration": "Input accepts timezone offsets and fractional seconds. A malformed or conflicting record is quarantined, not fatal. Unknown outcomes on role changes fail closed. One identity with a hundred thousand unusual edges is analysed in about a second. Benign three-edge fan-out can still alert, and hops more than thirty minutes apart are missed.",
-    "evidence_excerpt": "\u2714 RFC3339 offsets/microseconds parse without accepting ambiguous or impossible dates (0.904541ms)\n\u2714 frozen reference baseline handles renamed actions, self-approval, revocation, 70s paths, absent correlation and harmless novelty (312.526875ms)\n\u2714 12,000 held-out observations are evaluated without the old 10k cap (615.012334ms)\n\u2714 role regrant supersedes an earlier revocation but not a later one (28.961875ms)\n\u2714 clock normalization preserves raw evidence, flags uncertain order and handles late prerequisites (0.795416ms)\n\u2714 signed ingestion persists and evaluates more than ten thousand real observations (1069.748333ms)"
-  },
-  {
-    "start_seconds": 250,
-    "duration_seconds": 25,
-    "title": "Offline deployment and clean checkout",
-    "narration": "The root Docker build works from source without prebuilt local binaries. Offline review includes both Linux architectures and pinned runtime images. Tests run unprivileged, with network access disabled and read only source. Real TLS trust and plaintext refusal are checked. The dashboard requires an observer token; identity metadata now requires proof of key possession.",
-    "evidence_excerpt": "PASS: actual TLS 1.3 API, explicit CA trust, rejection of untrusted certificate and non-loopback plaintext configuration.\n\n\u2139 tests 104\n\u2139 pass 104\n\u2139 fail 0\n\u2139 skipped 0"
-  },
-  {
-    "start_seconds": 275,
-    "duration_seconds": 25,
-    "title": "Reproduce and inspect the boundaries",
-    "narration": "Run the demo script to reproduce the adapter, crypto, lifecycle, messaging, detection and independent node checks. The two page brief links this video and states the threat model. This is executable evidence under explicit assumptions, not universal formal verification. Review the known detector misses, memory disposal assumption, lease clock requirement and absence of session resumption before deploying.",
-    "evidence_excerpt": "./scripts/install-node.sh\n./scripts/demo.sh\n\nOffline bundle:\n./scripts/demo.sh --docker\n\nSource and evidence:\ngithub.com/lokendra005/KeyGuard_Devforge\n\nLimits: no session resumption, no independent audit,\nno hidden-test score or production-accuracy claim."
+    "start_seconds": 171.68,
+    "end_seconds": 188.03,
+    "title": "Stated limits",
+    "narration": "We state our limits. There's no Double Ratchet and no session resumption. A replica can honour an old lease for under a second, and we report exactly when. Lateral movement slower than thirty minutes is missed. The repository builds from the README on a clean machine. Thank you."
   }
 ]

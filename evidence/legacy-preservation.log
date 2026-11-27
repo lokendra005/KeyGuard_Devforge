@@ -1,3 +1,0 @@
-PASS: 373 Go source/dependency/fixture files are byte-identical to the first commit, relocated under legacy/.
-PASS: moved Go build completed with vendored dependencies.
-PASS: all 14 existing key files match their pre-upgrade SHA-384 manifest. No live migration or state deletion was performed.

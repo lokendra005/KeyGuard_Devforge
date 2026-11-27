@@ -19,7 +19,7 @@
 | Independently written topology holdout | TP=1300, FP=0, FN=100, TN=11800; F1=0.9630; median delay 98295.5 ms; 0 false-alerted events / 1000 benign |
 | Concurrent clock regression stress | 20 additional successful AMD64 runs, three fresh workers each |
 | Signed API ingestion | 10,020 observations persisted and evaluated; no old 10k cutoff |
-| Submission brief/video | Updated two-page PDF; earlier review-v3 300-second walkthrough is explicitly historical |
+| Submission brief/video | Two-page PDF; demo video in the [Google Drive folder](https://drive.google.com/drive/folders/1PSfjDx8Oe8Mvfz7y5mz6MsXEh54Xfo05?usp=sharing), linked from the README and the brief |
 | Precision regression | Exhaustive pivot oracle across 4,000 observations; no previously detected attack events lost across 20 old/new comparisons |
 
 The suite uses real crypto, actual subprocess boundaries, real HTTP/CLI delivery, actual SIGKILL, separate node databases and injected transport delay/partitions. No crypto mock or skipped test is counted as a pass. The public validator's 22 records include setup and formatting checks, not 22 independent security proofs.

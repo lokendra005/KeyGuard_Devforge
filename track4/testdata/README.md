@@ -1,7 +1,7 @@
 # Independent ML-DSA-65 test fixtures
 
 `crypto-vectors.json.gz` contains public test keys and signatures, never operator keys.
-The Node verifier reads this checked-in corpus directly, without network access. The optional Go suite has a separate copy under `legacy/`.
+The Node verifier reads this checked-in corpus directly, without network access.
 
 Sources pinned for this import:
 
@@ -11,7 +11,7 @@ Sources pinned for this import:
   `testvectors_v1/mldsa_65_verify_test.json`, Apache 2.0 (license alongside this file).
 
 The fixture's `sources` array records all seven exact upstream URLs and original
-file SHA-256 checksums. `legacy/scripts/import-crypto-vectors.py` reproduces extraction
+file SHA-256 checksums. `scripts/import-crypto-vectors.py` reproduces extraction
 and deterministic gzip compression from those downloaded files. It performs no
 network access and asserts case counts to prevent an unnoticed corpus change.
 

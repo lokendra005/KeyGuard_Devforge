@@ -2,7 +2,7 @@
 
 This is the protected-file and encrypted-message implementation in `track4/`, not a mock adapter around the Go ledger. The root `track4_service.cjs`, HTTP API, operator CLI and dashboard use the same SQLite authority and policy functions. No organizer event IDs, labels, owners, keys, file contents or expected answers occur in the decision code. Limits and cryptographic domain identifiers are protocol parameters; deployment policy and detector baselines are explicit inputs.
 
-An optional Go/PostgreSQL implementation is isolated under `legacy/`; it is not part of the Node judge path. Source relocation does not migrate deployed keys or state. Its protocol is documented under `legacy/docs/`. Repository history and third-party attribution are retained.
+The submission is the Node implementation under `track4/` with the root `track4_service.cjs` adapter; there is no other runtime in this repository.
 
 ## Components and trust boundaries
 

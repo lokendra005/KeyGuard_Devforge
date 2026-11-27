@@ -43,4 +43,4 @@ The [two-page brief](KeyGuard-brief.pdf) contains architecture, threat model and
 
 Session resumption is deliberately unsupported, and the isolated-access detector blind spot is measured. Synthetic metrics, public-validator results and local tests are not hidden-worker scores or security certification. Authenticate release checksums through an independent channel; replacing an archive and its checksum together defeats checksums alone.
 
-Earlier review-v3 walkthrough (its detector results predate the precision update): [Google Drive video](https://drive.google.com/file/d/12ctCr6DAvSzDgRySdrr2QayL8FVswcMR/view). Anyone with the link can view; file discovery is disabled. The review-v3 release retains that downloadable MP4. Current detector measurements and the rebuilt runtime bundle are in review-v4.
+Demo video (about 3 minutes, narrated, real command output on Node 24.11.1): [Google Drive folder](https://drive.google.com/drive/folders/1PSfjDx8Oe8Mvfz7y5mz6MsXEh54Xfo05?usp=sharing), viewable by anyone with the link. The same link is in the README and the brief.

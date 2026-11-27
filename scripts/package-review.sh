@@ -6,7 +6,7 @@ mkdir -p dist
 stage=$(mktemp -d "${TMPDIR:-/tmp}/keyguard-package.XXXXXX")
 trap 'rm -rf "$stage"' EXIT INT TERM
 # Explicit submission source only; no operator state, unrelated project or generated secrets.
-tar --exclude=docs/SECRET_WARDS_PLAN.md -cf - track4 track4_service.cjs threat-model.json scripts docs evidence README.md Makefile Dockerfile Dockerfile.dockerignore Dockerfile.track4 Dockerfile.track4.dockerignore compose.yaml compose.track4.yaml compose.replicas.yaml .github .gitignore .dockerignore | tar -xf - -C "$stage"
+tar -cf - track4 track4_service.cjs threat-model.json scripts docs evidence README.md Makefile Dockerfile Dockerfile.dockerignore compose.yaml compose.replicas.yaml .github .gitignore .dockerignore | tar -xf - -C "$stage"
 mkdir -p "$stage/dist"
 for arch in amd64 arm64; do cp "dist/track4-node-$arch.tar" "$stage/dist/"; done
 (cd "$stage"

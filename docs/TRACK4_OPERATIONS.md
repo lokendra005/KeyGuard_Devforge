@@ -109,11 +109,10 @@ The public `/v1/context` exposes only authority/protocol context. `/v1/identity`
 
 Use `serve --host ADDRESS --cert cert.pem --tls-key key.pem --origin https://HOST:PORT` for TLS; clients use `--ca` for a private CA. HTTP is loopback-only. Host and Origin headers are checked; non-loopback startup without TLS/origin fails.
 
-For Compose, initialize state and set `KIG_TRACK4_STATE`, `KIG_TLS_CERT`, `KIG_TLS_KEY`, `KIG_PUBLIC_ORIGIN`, plus matching `KIG_UID`/`KIG_GID`. Run `docker compose -f compose.track4.yaml up --build`. The published address defaults to host loopback. Additional local API processes need distinct ports/node IDs and the same state directory. Use a local filesystem with SQLite WAL locking, not an arbitrary network share.
+For Compose, initialize state and set `KIG_TRACK4_STATE`, `KIG_TLS_CERT`, `KIG_TLS_KEY`, `KIG_PUBLIC_ORIGIN`, plus matching `KIG_UID`/`KIG_GID`. Run `docker compose -f compose.yaml up --build`. The published address defaults to host loopback. Additional local API processes need distinct ports/node IDs and the same state directory. Use a local filesystem with SQLite WAL locking, not an arbitrary network share.
 
 `serve --anchor checkpoint.json` verifies startup history against an independently retained prefix. Refresh that external anchor through your custody process; an old checkpoint cannot detect an unseen lost suffix. Detector inputs are bounded, with a 100,000-event / 64-MiB offline analysis budget. The API uses smaller 16-MiB transport/metadata budgets. Graphs group by actor across sessions, with distinct undirected edges and a 30-minute window.
 
-Optional Go commands and storage are under `legacy/`; Track 4 and Go checkpoints are different formats.
 
 ## Independent read nodes
 
