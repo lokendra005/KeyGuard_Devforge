@@ -67,6 +67,7 @@ test("message recipient, sender, suite, authority, chunks and ciphertext are aut
     "chunks",
     "nonce",
     "digest",
+    "x25519_ephemeral",
   ])
     await t.test(field, (sub) => {
       const p = pair(sub);
@@ -175,4 +176,79 @@ test("random messages, empty bodies and chunk boundaries round-trip under shuffl
     A.deepEqual(result.body, data);
     receiver.close();
   }
+});
+test("hybrid X25519+ML-KEM: both secrets required, X25519 keys bound, suite downgrade rejected", async (t) => {
+  // Re-sign a modified header with the real sender key so only key derivation/suite checks can catch it.
+  const resign = (p, frame, edit) => {
+    const bad = structuredClone(frame);
+    edit(bad.header);
+    bad.signature = C.sign(
+      p.f.keys.owner.private_key,
+      "KIG/message-header/v1",
+      bad.header,
+    );
+    return bad;
+  };
+  await t.test("sender X25519 ephemeral substitution fails authentication", (sub) => {
+    const p = pair(sub);
+    const frame = p.prepare(Buffer.from("private"))[0];
+    const other = C.c.generateKeyPairSync("x25519").publicKey;
+    const raw = other.export({ format: "der", type: "spki" }).subarray(12);
+    const bad = resign(p, frame, (h) => (h.x25519_ephemeral = raw.toString("base64")));
+    A.throws(() => p.receiver.receive(bad));
+    A.equal(p.receiver.pending.size, 0);
+  });
+  await t.test("offer X25519 key tampering is rejected by the signed offer", (sub) => {
+    const p = pair(sub);
+    const raw = C.b64(p.offer.x25519_public_key);
+    raw[0] ^= 1;
+    p.offer.x25519_public_key = raw.toString("base64");
+    A.throws(() => p.prepare(Buffer.from("x")), (e) => e.code === "INVALID_OFFER");
+  });
+  await t.test("signed downgrade to the ML-KEM-only suite is rejected", (sub) => {
+    const p = pair(sub);
+    const frame = p.prepare(Buffer.from("private"))[0];
+    const bad = resign(p, frame, (h) => {
+      h.version = 1;
+      h.suite = "ML-KEM-768/HKDF-SHA384/AES-256-GCM/ML-DSA-65";
+    });
+    A.throws(() => p.receiver.receive(bad), (e) => e.code === "INVALID_HEADER");
+    const offer = structuredClone(p.offer);
+    offer.suite = "ML-KEM-768/HKDF-SHA384/AES-256-GCM/ML-DSA-65";
+    offer.version = 1;
+    A.throws(
+      () => M.verifyOffer(offer, p.f.keys.peer.public_key, p.f.now()),
+      (e) => e.code === "WRONG_RECIPIENT",
+    );
+  });
+  await t.test("white-box: key derivation needs BOTH shared secrets", (sub) => {
+    const p = pair(sub);
+    const frame = p.prepare(Buffer.from("both"))[0];
+    const h = frame.header;
+    const entry = p.receiver.pending.get(h.offer_id);
+    const kem = C.c.decapsulate(entry.privateKey, C.b64(h.kem_ciphertext));
+    const dh = C.c.diffieHellman({
+      privateKey: entry.x25519PrivateKey,
+      publicKey: C.c.createPublicKey({
+        key: Buffer.concat([
+          Buffer.from("302a300506032b656e032100", "hex"),
+          C.b64(h.x25519_ephemeral),
+        ]),
+        format: "der",
+        type: "spki",
+      }),
+    });
+    const { header, signature, index, chunk, ...rest } = frame;
+    A.deepEqual(rest, {});
+    const bound = Object.fromEntries(
+      Object.entries(h).filter(
+        ([k]) => !["nonce", "tag", "length", "chunks", "digest"].includes(k),
+      ),
+    );
+    const packet = { nonce: h.nonce, tag: h.tag, body: chunk };
+    const tryOpen = (a, b) => C.open(M.derive(a, b, p.offer, bound), packet, bound);
+    A.deepEqual(tryOpen(kem, dh), Buffer.from("both"));
+    A.throws(() => tryOpen(C.c.randomBytes(32), dh));
+    A.throws(() => tryOpen(kem, C.c.randomBytes(32)));
+  });
 });
