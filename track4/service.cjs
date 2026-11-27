@@ -61,10 +61,12 @@ function authenticate(store, envelope, now, bootstrap = false) {
     auth.key_id,
     request.nonce,
   ]);
-  C.check(
-    !store.db.prepare("SELECT id FROM nonces WHERE id=?").get(nonceID),
-    "REPLAY",
-  );
+  if (store.db.prepare("SELECT id FROM nonces WHERE id=?").get(nonceID)) {
+    // The signature verified, so the replayed envelope names a real identity worth alerting on.
+    const error = new C.Fault("REPLAY");
+    Object.assign(error, { verifiedActor: auth.actor, verifiedKey: auth.key_id, rule: "signed_replay" });
+    throw error;
+  }
   store.db
     .prepare("INSERT INTO nonces VALUES(?,?)")
     .run(nonceID, request.expires);
@@ -748,6 +750,30 @@ function executeTransaction(store, input, options = {}) {
           .map((r) => C.parse(r.payload)),
         checkpoint: store.checkpoint(),
         denial_counters: store.get("denial_counters") || [],
+        security_alerts: db
+          .prepare(
+            "SELECT payload FROM events WHERE json_extract(json_extract(payload,'$'),'$.action')='security.alert' ORDER BY seq DESC LIMIT 100",
+          )
+          .all()
+          .map((r) => {
+            const e = C.parse(r.payload);
+            return { rule: e.detail.rule, identity: e.actor, key_id: e.detail.key_id, services: [e.detail.service], events: [e.seq], reason: e.detail.reason, op: e.detail.op, time_ms: e.time_ms };
+          })
+          .concat(
+            // Alerts raised on replica nodes arrive via replica.sync uploads (their own signed chains).
+            db
+              .prepare(
+                "SELECT node_id,body FROM replica_events WHERE json_extract(json_extract(body,'$'),'$.payload.action')='security.alert' ORDER BY received_ms DESC LIMIT 100",
+              )
+              .all()
+              .map((r) => {
+                const e = C.parse(r.body), p = e.payload;
+                return { rule: p.detail.rule, identity: p.actor, key_id: p.detail.key_id, services: [r.node_id], events: [r.node_id + ":" + e.seq], reason: p.detail.reason, op: p.detail.op, time_ms: p.time_ms };
+              }),
+          )
+          .sort((a, b) => b.time_ms - a.time_ms)
+          .slice(0, 100),
+        security_alert_counters: store.get("security_alert_counters") || {},
         detection: store.get("detection") || null,
       };
     }
@@ -801,9 +827,46 @@ function execute(store, input, options = {}) {
       } catch {
         /* A failed authority never releases content; the original failure remains visible. */
       }
+      if (error.verifiedActor && error.rule)
+        try {
+          securityAlert(store, input, error);
+        } catch {
+          /* Alerting is best effort; the original rejection stands. */
+        }
     }
     throw error;
   }
+}
+const ALERTS_PER_ACTOR_MINUTE = 20;
+// Self-detection: a command whose signature verified but was then rejected (revoked/expired key, disabled
+// actor, stale epoch, replay) means a real key is in someone's hands. Record it in the signed audit chain
+// in its own transaction (the command's transaction already rolled back). At most 20 alerts per actor per
+// minute reach the chain; the rest only bump a per-actor counter, so a stolen key cannot flood the log.
+// Response on revoked_key_use: drop that actor's dashboard viewer tokens and pending mail offers.
+function securityAlert(store, input, error) {
+  store.transaction((now) => {
+    const minute = Math.floor(now / 60000),
+      actor = error.verifiedActor;
+    const counters = store.get("security_alert_counters") || {};
+    const c = counters[actor]?.minute === minute ? counters[actor] : { minute, recorded: 0, suppressed: 0 };
+    counters[actor] = c;
+    if (c.recorded >= ALERTS_PER_ACTOR_MINUTE) c.suppressed++;
+    else {
+      c.recorded++;
+      store.record(now, "security.alert", actor, {
+        rule: error.rule,
+        key_id: error.verifiedKey || null,
+        service: "authority",
+        op: typeof input?.body?.op === "string" ? input.body.op.slice(0, 64) : null,
+        reason: error.code,
+      });
+    }
+    store.set("security_alert_counters", counters);
+    if (error.rule === "revoked_key_use") {
+      store.db.prepare("DELETE FROM viewers WHERE actor=?").run(actor);
+      store.db.prepare("DELETE FROM offers WHERE actor=?").run(actor);
+    }
+  });
 }
 function command(identity, details, body, now = Date.now()) {
   const request = {

@@ -420,6 +420,7 @@ class Store {
           "backup",
           "policy.budget",
           "protocol.upgrade",
+          "security.alert",
         ].includes(action),
       "AUDIT_CAPACITY",
     );

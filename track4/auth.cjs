@@ -38,6 +38,14 @@ function verifyCommand(envelope, context, now, bootstrap = false) {
   ) {
     const error = new C.Fault("UNAUTHORIZED");
     error.verifiedActor = actor.id;
+    error.verifiedKey = key.id;
+    error.rule = key.revoked
+      ? "revoked_key_use"
+      : actor.disabled
+        ? "disabled_actor_use"
+        : !bootstrap && request.epoch !== actor.epoch
+          ? "stale_epoch_use"
+          : "expired_key_use";
     throw error;
   }
   if (bootstrap)
