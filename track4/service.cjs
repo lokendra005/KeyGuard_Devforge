@@ -375,7 +375,11 @@ function executeTransaction(store, input, options = {}) {
           event.detail.decision === row.decision,
         "READ_AUDIT_MISMATCH",
       );
-      return { request_id: row.id, decision: row.decision };
+      return {
+        request_id: row.id,
+        decision: row.decision,
+        ...(row.event_seq ? { inclusion: store.inclusion(row.event_seq) } : {}),
+      };
     }
     if (op === "revoke") {
       requireAdmin(auth);
@@ -716,7 +720,11 @@ function executeTransaction(store, input, options = {}) {
         auth.trusted || auth.role === "admin" || auth.role === "auditor",
         "FORBIDDEN",
       );
-      return store.evidence(request.prefix);
+      return {
+        ...store.evidence(request.prefix),
+        slh_public_key: store.slhPublicKey(),
+        tree_head: store.treeHead(),
+      };
     }
     if (op === "policy.budget") {
       requireAdmin(auth);
@@ -749,6 +757,9 @@ function executeTransaction(store, input, options = {}) {
           .all()
           .map((r) => C.parse(r.payload)),
         checkpoint: store.checkpoint(),
+        tree_head: store.treeHead(),
+        audit_public_key: store.audit.public_key,
+        slh_public_key: store.slhPublicKey(),
         denial_counters: store.get("denial_counters") || [],
         security_alerts: db
           .prepare(
