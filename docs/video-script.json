@@ -4,7 +4,7 @@
     "duration_seconds": 25,
     "title": "Working system, reproducible evidence",
     "narration": "This is KeyGuard for DevForge Track Four. This narrated walkthrough uses actual recorded adapter and test output. The source, run scripts and evidence are available in the repository. The system uses real post quantum cryptography, not mocked signatures or a dataset classifier. Runtime decisions use registered identities, current policy and cryptographic verification.",
-    "evidence_excerpt": "ACTUAL ADAPTER WALKTHROUGH | v24.11.1 | darwin/arm64\n\n\u2139 tests 74\n\u2139 pass 74\n\u2139 fail 0\n\u2139 skipped 0"
+    "evidence_excerpt": "ACTUAL ADAPTER WALKTHROUGH | v24.11.1 | darwin/arm64\n\n\u2139 tests 84\n\u2139 pass 84\n\u2139 fail 0\n\u2139 skipped 0"
   },
   {
     "start_seconds": 25,
@@ -18,63 +18,63 @@
     "duration_seconds": 25,
     "title": "Real protected reads",
     "narration": "Protected reads use real M L KEM seven sixty eight encapsulation. The proof is the exact organizer specified HMAC over the challenge concatenated with stored content. An independent Python implementation generated sixteen keys, decapsulated the actual Linux adapter responses and recomputed the proofs. Signature verification also passes two hundred twenty five pinned independent vectors.",
-    "evidence_excerpt": "\u2714 ML-KEM protected read binds exact challenge/body; invalid keys and replays fail closed (6.259417ms)\nPASS: Node v24.11.1 / OpenSSL 3.5.4; 225 independent NIST/Wycheproof ML-DSA-65 verification vectors (82 valid, 143 invalid), including native context handling and canonical key/length validation.\n\nPASS: 16 independently generated pqcrypto ML-KEM-768 keys; decapsulation/HMAC interoperability, wrong-key/content, replay and post-revocation denial.\n"
+    "evidence_excerpt": "\u2714 ML-KEM protected read binds exact challenge/body; invalid keys and replays fail closed (13.04575ms)\nPASS: Node v24.11.1 / OpenSSL 3.5.4; 225 independent NIST/Wycheproof ML-DSA-65 verification vectors (82 valid, 143 invalid), including native context handling and canonical key/length validation.\n\nPASS: 16 independently generated pqcrypto ML-KEM-768 keys; decapsulation/HMAC interoperability, wrong-key/content, replay and post-revocation denial.\n"
   },
   {
     "start_seconds": 75,
     "duration_seconds": 25,
     "title": "Signed rotation and recovery",
     "narration": "Network commands bind the authority, destination audience, actor, key fingerprint, epoch, nonce, expiry and operation. Rotation verifies possession of the replacement key and commits the cutoff atomically. In flight transfers continue only during the old key's valid grace period. Two distinct custodians approve loss recovery, and stale approvers or competing proposals fail.",
-    "evidence_excerpt": "\u2714 rotation has a precise cutoff, preserves content and rejects prior-epoch authorization (31.478875ms)\n\u2714 two-person recovery fences competing proposals and permanently retires old keys (43.231ms)\n\u2714 failed persistence rolls back rotation and data, and clocks cannot silently regress (10.105584ms)\n\u2714 SIGKILL during rotation recovers the prior committed key and preserved revocation (36.398916ms)\n\u2714 bounded loss recovery delivers exactly once; incomplete expired messages report failure (8.561375ms)\n\u2714 partial transfers survive receiver rotation during grace and fail exactly at cutoff (30.162125ms)\n3 Crash recovery -> track4/test/core.test.cjs"
+    "evidence_excerpt": "\u2714 rotation has a precise cutoff, preserves content and rejects prior-epoch authorization (23.167625ms)\n\u2714 two-person recovery fences competing proposals and permanently retires old keys (35.258167ms)\n\u2714 failed persistence rolls back rotation and data, and clocks cannot silently regress (6.6745ms)\n\u2714 SIGKILL during rotation recovers the prior committed key and preserved revocation (36.124ms)\n\u2714 bounded loss recovery delivers exactly once; incomplete expired messages report failure (14.770209ms)\n\u2714 partial transfers survive receiver rotation during grace and fail exactly at cutoff (23.71925ms)\n3 Crash recovery -> track4/test/core.test.cjs"
   },
   {
     "start_seconds": 100,
     "duration_seconds": 25,
     "title": "Independent nodes, bounded stale access",
-    "narration": "Each node keeps an encrypted cache and signed policy chain. Its replication credential is bound to one node and key. Sync exports changes, uploads signed read logs, and audits every export. Three nodes receive delayed updates; two partitions expire closed. The lease starts with the challenge. The bound assumes a progressing monotonic clock, and does not measure network delivery.",
-    "evidence_excerpt": "lease_ms: 3000\np50_ms: 337\nmax_of_5_samples_ms: 3000\n\nnode 0 | UNAUTHORIZED | observed 96 ms\nnode 1 | UNAUTHORIZED | observed 164 ms\nnode 2 | UNAUTHORIZED | observed 337 ms\nnode 3 | LEASE_EXPIRED | observed 2963 ms\nnode 4 | LEASE_EXPIRED | observed 3000 ms"
+    "narration": "Each node keeps an encrypted cache and signed policy chain. A sync needs the replicator credential and a signature from the node's own key, so a stolen credential cannot export. Across one hundred revocations, a stolen key stops working on every node within about one second. Each revoke reports when it holds everywhere. Partitioned nodes expire closed.",
+    "evidence_excerpt": "100 revocations x 5 replicas (stolen key, old epoch):\nobservations: 500\np50_ms: 526\np95_ms: 1032\np99_ms: 1116\nmax_ms: 1124\nmax_reported_replica_grace_ms: 3013\n\npartition run, lease_ms 3000:\nnode 0 | UNAUTHORIZED | observed 82 ms\nnode 1 | UNAUTHORIZED | observed 172 ms\nnode 2 | UNAUTHORIZED | observed 317 ms\nnode 3 | LEASE_EXPIRED | observed 2954 ms\nnode 4 | LEASE_EXPIRED | observed 2983 ms"
   },
   {
     "start_seconds": 125,
     "duration_seconds": 25,
     "title": "Crash safety and audit availability",
     "narration": "The suite actually kills a process during an uncommitted rotation and checks recovery. Authentication, effects and signed audit records share a transaction. Forged requests now update bounded minute counters instead of filling the signed log. Reaching the normal audit budget cannot block revocation or recovery. Physical disk failure remains a real limit to durable commits.",
-    "evidence_excerpt": "old scenario is inaccessible\nnew scenario's owner can read\n{\"body\":\"New scenario resource.\",\"decision\":\"allow\"}\n\u2714 audit and file capacity failures preserve previously acknowledged state (10.448ms)\n\u2714 SIGKILL during rotation recovers the prior committed key and preserved revocation (36.398916ms)\n\u2714 identity metadata needs proof of key possession and forged HTTP requests do not inflate the signed log (60.643958ms)\n\u2714 worker scenarios reset atomically; expected errors use JSON exit zero and omit SQLite noise (475.72425ms)"
+    "evidence_excerpt": "old scenario is inaccessible\nnew scenario's owner can read\n{\"body\":\"New scenario resource.\",\"decision\":\"allow\"}\n\u2714 audit and file capacity failures preserve previously acknowledged state (6.804833ms)\n\u2714 SIGKILL during rotation recovers the prior committed key and preserved revocation (36.124ms)\n\u2714 identity metadata needs proof of key possession and forged HTTP requests do not inflate the signed log (45.289167ms)\n\u2714 worker scenarios reset atomically; expected errors use JSON exit zero and omit SQLite noise (332.931708ms)"
   },
   {
     "start_seconds": 150,
     "duration_seconds": 25,
     "title": "Backups and signed history",
     "narration": "File contents and identity backups are encrypted. Signed SHA three eighty four audit chains preserve record boundaries and correlation history. A trusted checkpoint detects an older restored backup. Cold startup verifies a signed saved checkpoint and checks only newer links; full exported history can be checked independently. Master keys are beside the database, so encryption protects database only leaks, not an entire compromised host.",
-    "evidence_excerpt": "\u2714 retrying a read correlation ID rechecks policy and preserves both historical decisions (12.730083ms)\n\u2714 signed audit rejects edits, truncation and text injection without conflating records (8.96275ms)\n\u2714 encrypted key and authority backups verify corruption, wrong passwords and stale anchors (478.200792ms)\n\u2714 frozen reference baseline handles renamed actions, self-approval, revocation, 70s paths, absent correlation and harmless novelty (239.36025ms)\n\u2714 signed persisted checkpoints verify only the suffix on cold start and reject signature/truncation attacks (70.506875ms)\n\u2714 status verifies only the signed suffix after its cached checkpoint; full exported history still verifies (9.682583ms)\n\"scope\": \"Single-process, signed-command core including signature verification, crypto, SQLite commit and signed audit; excludes HTTP/process startup. Local filesystem/cache conditions apply.\""
+    "evidence_excerpt": "\u2714 retrying a read correlation ID rechecks policy and preserves both historical decisions (18.786792ms)\n\u2714 signed audit rejects edits, truncation and text injection without conflating records (7.960375ms)\n\u2714 encrypted key and authority backups verify corruption, wrong passwords and stale anchors (425.766583ms)\n\u2714 frozen reference baseline handles renamed actions, self-approval, revocation, 70s paths, absent correlation and harmless novelty (206.423375ms)\n\u2714 signed persisted checkpoints verify only the suffix on cold start and reject signature/truncation attacks (59.883875ms)\n\u2714 status verifies only the signed suffix after its cached checkpoint; full exported history still verifies (9.526083ms)\n\"scope\": \"Single-process, signed-command core including signature verification, crypto, SQLite commit and signed audit; excludes HTTP/process startup. Local filesystem/cache conditions apply.\""
   },
   {
     "start_seconds": 175,
     "duration_seconds": 25,
     "title": "Encrypted client delivery",
     "narration": "The recipient signs a one use ephemeral key offer bound to both peers. The sender encapsulates, derives a transcript bound key and encrypts locally. The relay stores ciphertext. Reordered and duplicate chunks are handled, conflicting or modified chunks fail, and incomplete messages expire. Real CLI processes transfer a file and acknowledge it. Session resumption is deliberately unsupported.",
-    "evidence_excerpt": "\u2714 real CLI sender/receiver deliver an encrypted file through HTTP and acknowledge it (1143.863042ms)\n\u2714 one-time KEM message decrypts only after complete authenticated reassembly; duplicates are rejected (23.619667ms)\n\u25b6 message recipient, sender, suite, authority, chunks and ciphertext are authenticated\n\u2714 message recipient, sender, suite, authority, chunks and ciphertext are authenticated (82.498459ms)\n\u2714 bounded loss recovery delivers exactly once; incomplete expired messages report failure (8.561375ms)\n\u2714 relay stores ciphertext, supports partial retries and checks both peers at every operation (61.782375ms)"
+    "evidence_excerpt": "\u2714 real CLI sender/receiver deliver an encrypted file through HTTP and acknowledge it (1119.167833ms)\n\u2714 one-time KEM message decrypts only after complete authenticated reassembly; duplicates are rejected (15.529084ms)\n\u25b6 message recipient, sender, suite, authority, chunks and ciphertext are authenticated\n\u2714 message recipient, sender, suite, authority, chunks and ciphertext are authenticated (84.125291ms)\n\u2714 bounded loss recovery delivers exactly once; incomplete expired messages report failure (14.770209ms)\n\u2714 relay stores ciphertext, supports partial retries and checks both peers at every operation (61.484416ms)"
   },
   {
     "start_seconds": 200,
     "duration_seconds": 25,
     "title": "Detection beyond the practice set",
-    "narration": "The original holdout uses four thousand reference and twelve thousand evaluation events. Increased sensitivity gives F one of point seven five, with seven hundred twenty false positives. The independent mesh and hub holdout scores about point eight nine seven, including two hundred false positives and one hundred misses. It tests slow chains, fan out, session hopping and two successful hops. Labels only enter scoring.",
-    "evidence_excerpt": "{\n  \"tp\": 1080,\n  \"fp\": 720,\n  \"fn\": 0,\n  \"tn\": 10200,\n  \"f1\": 0.75,\n  \"median_alert_latency_ms\": 82019,\n  \"false_alerted_events_per_1000_benign\": 65.93406593406593\n}"
+    "narration": "Both holdouts use separate reference and evaluation windows, and their scores are unchanged. On the organizer practice set, all five labelled findings alert, with no false alerts. Credential hopping across identities is detected. Labels only enter scoring. Synthetic accuracy is not a production guarantee.",
+    "evidence_excerpt": "{\n  \"tp\": 1080,\n  \"fp\": 240,\n  \"fn\": 0,\n  \"tn\": 10680,\n  \"f1\": 0.9,\n  \"median_alert_latency_ms\": 83651.5,\n  \"false_alerted_events_per_1000_benign\": 21.978021978021978\n}"
   },
   {
     "start_seconds": 225,
     "duration_seconds": 25,
     "title": "Input diversity and realistic limits",
-    "narration": "Input accepts timezone offsets and fractional seconds. Missing optional fields do not crash ingestion. Graphs span sessions, with a thirty minute window and ten minute half life. Independent approvals suppress planned activity. Unknown benign two-edge activity still causes false positives, and isolated attacks can be missed. Both benchmarks report these limits and receipt-based alert delays.",
-    "evidence_excerpt": "\u2714 RFC3339 offsets/microseconds parse without accepting ambiguous or impossible dates (0.6335ms)\n\u2714 frozen reference baseline handles renamed actions, self-approval, revocation, 70s paths, absent correlation and harmless novelty (239.36025ms)\n\u2714 12,000 held-out observations are evaluated without the old 10k cap (397.690416ms)\n\u2714 role regrant supersedes an earlier revocation but not a later one (0.835042ms)\n\u2714 clock normalization preserves raw evidence, flags uncertain order and handles late prerequisites (3.076208ms)\n\u2714 signed ingestion persists and evaluates more than ten thousand real observations (658.469126ms)"
+    "narration": "Input accepts timezone offsets and fractional seconds. A malformed or conflicting record is quarantined, not fatal. Unknown outcomes on role changes fail closed. One identity with a hundred thousand unusual edges is analysed in about a second. Benign three-edge fan-out can still alert, and hops more than thirty minutes apart are missed.",
+    "evidence_excerpt": "\u2714 RFC3339 offsets/microseconds parse without accepting ambiguous or impossible dates (0.552792ms)\n\u2714 frozen reference baseline handles renamed actions, self-approval, revocation, 70s paths, absent correlation and harmless novelty (206.423375ms)\n\u2714 12,000 held-out observations are evaluated without the old 10k cap (332.814167ms)\n\u2714 role regrant supersedes an earlier revocation but not a later one (0.482ms)\n\u2714 clock normalization preserves raw evidence, flags uncertain order and handles late prerequisites (0.722709ms)\n\u2714 signed ingestion persists and evaluates more than ten thousand real observations (663.641751ms)"
   },
   {
     "start_seconds": 250,
     "duration_seconds": 25,
     "title": "Offline deployment and clean checkout",
     "narration": "The root Docker build works from source without prebuilt local binaries. Offline review includes both Linux architectures and pinned runtime images. Tests run unprivileged, with network access disabled and read only source. Real TLS trust and plaintext refusal are checked. The dashboard requires an observer token; identity metadata now requires proof of key possession.",
-    "evidence_excerpt": "PASS: actual TLS 1.3 API, explicit CA trust, rejection of untrusted certificate and non-loopback plaintext configuration.\n\n\u2139 tests 74\n\u2139 pass 74\n\u2139 fail 0\n\u2139 skipped 0"
+    "evidence_excerpt": "PASS: actual TLS 1.3 API, explicit CA trust, rejection of untrusted certificate and non-loopback plaintext configuration.\n\n\u2139 tests 84\n\u2139 pass 84\n\u2139 fail 0\n\u2139 skipped 0"
   },
   {
     "start_seconds": 275,

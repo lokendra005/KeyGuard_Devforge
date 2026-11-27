@@ -3,7 +3,7 @@
   "reference_events": 4000,
   "heldout_events": 12000,
   "baseline_commitment": "ff67d3bce22ebf2c2ffde104d329eaa25ac9fda1e6211db8119311a24c873aef3b3deb9cc15e6d4d0f018be18c99082e",
-  "elapsed_ms": 110,
+  "elapsed_ms": 124,
   "metrics": {
     "unit": "event",
     "tp": 1080,

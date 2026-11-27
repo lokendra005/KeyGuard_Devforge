@@ -4,16 +4,17 @@
 
 | Check | Observed outcome |
 |---|---|
-| Exact Node 24.11.1, offline Linux ARM64 | 79/79 tests, zero failures/skips |
-| Exact Node 24.11.1, offline Linux AMD64 (emulated) | 79/79 tests, zero failures/skips |
+| Exact Node 24.11.1, offline Linux ARM64 | 84/84 tests, zero failures/skips |
+| Exact Node 24.11.1, offline Linux AMD64 (emulated) | 84/84 tests, zero failures/skips |
 | Independent ML-DSA verification vectors | 225/225 per architecture: 82 valid and 143 invalid cases |
 | Unmodified organizer validator | 22 passing records, exit zero; host and fresh Linux process/container transport |
 | Independent Python pqcrypto oracle | 16/16 random ML-KEM keypairs; exact decapsulation/HMAC, wrong key/content, replay and post-revocation checks |
 | TLS (retained review-v3 evidence) | Real TLS 1.3 with trusted CA succeeds; untrusted CA and non-loopback plaintext fail |
 | Actual TLS deployment (retained review-v3 evidence) | One authority + three independent cache containers on an internal network; allowed before revocation and denied afterward |
 | Clean-checkout Docker | Root source-only build succeeds; image-contained tests and vectors pass |
-| Five independent ARM64 nodes | L=3000 ms; median=323 ms; max of 5 samples=2979 ms; two partitions |
-| Five independent AMD64 nodes | L=3000 ms; median=329 ms; max of 5 samples=2972 ms; two partitions |
+| Revocation, 100 revocations x 5 replicas | sync 1000 ms, L=3000 ms; 500 observations; p50=526 ms, p95=1032 ms, p99=1116 ms, max=1124 ms; reported bound <= 3013 ms (`evidence/revocation-100.json`, host run) |
+| Five independent ARM64 nodes | L=3000 ms; median=317 ms; max of 5 samples=2983 ms; two partitions |
+| Five independent AMD64 nodes | L=3000 ms; median=352 ms; max of 5 samples=2948 ms; two partitions |
 | Original synthetic holdout | TP=1080, FP=240, FN=0, TN=10680; F1=0.9000; median alert delay 83651.5 ms; 21.98 false-alerted events / 1000 benign |
 | Independently written topology holdout | TP=1300, FP=0, FN=100, TN=11800; F1=0.9630; median delay 98295.5 ms; 0 false-alerted events / 1000 benign |
 | Concurrent clock regression stress | 20 additional successful AMD64 runs, three fresh workers each |
